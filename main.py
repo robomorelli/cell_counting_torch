@@ -1,8 +1,8 @@
 import random as rn
 import numpy as np
-from dataset.image_loader import *
 from model.resunet import *
-from model.utils import EarlyStopping, WeightedLoss
+from model.utils import EarlyStopping, WeightedLoss, load_data_train_eval
+from dataset_loader.image_loader import *
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms import transforms as T
@@ -11,13 +11,12 @@ from pathlib import Path
 import torch.multiprocessing as mp
 from tqdm import tqdm
 from time import sleep
-
-import fastai
+import torch
 
 np.random.seed(42)
 # The below is necessary for starting core Python generated random numbers
 # in a well-defined state.
-rn.seed(12345)
+rn.seed(123456)
 
 def train():
     cuda = torch.cuda.is_available()
@@ -26,31 +25,12 @@ def train():
         print('added visible gpu')
         ngpus = torch.cuda.device_count()
 
-    batch_size = 8
-    validation_split = 0.3
-    shuffle_dataset = True
-    random_seed = 42
+    else:
+        ngpus=1
 
-    root = "/davinci-1/home/morellir/artificial_intelligence/repos/cells_torch/DATASET/train_val/crop_augmented/"
-    transform = T.Compose([T.Lambda(lambda x: x*1./255)])
-    cells_images = CellsLoader(root + "images/", root + "masks/", val_split=0.3, transform = transform)
-
-    dataset_size = len(cells_images)
-    indices = list(range(dataset_size))
-    split = int(np.floor(validation_split * dataset_size))
-
-    if shuffle_dataset:
-        np.random.seed(random_seed)
-        np.random.shuffle(indices)
-    train_indices, val_indices = indices[split:], indices[:split]
-    # Creating PT data samplers and loaders:
-    train_sampler = SubsetRandomSampler(train_indices, )
-    valid_sampler = SubsetRandomSampler(val_indices)
-
-    train_loader = DataLoader(cells_images, batch_size=batch_size*ngpus,
-                              sampler=train_sampler)
-    validation_loader = DataLoader(cells_images, batch_size=batch_size*ngpus,
-                                   sampler=valid_sampler)
+    num_workers = 12
+    train_loader, validation_loader = load_data_train_eval(batch_size=16, validation_split=0.3,
+                        num_workers=num_workers, shuffle_dataset=True, random_seed=42, ngpus=ngpus)
 
     model = nn.DataParallel(c_resunet(arch='c-ResUnet', n_features_start = 16, n_out = 1,
                                       pretrained = False, progress= True).to(device))
@@ -60,14 +40,14 @@ def train():
     Set the model to the training mode first and train
     """
     val_loss = 10 ** 16
-    patience = 1
+    patience = 5
     lr = 0.003
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience, threshold=0.0001,
                                               threshold_mode='rel', cooldown=0, min_lr=9e-8, verbose=True)
     early_stopping = EarlyStopping(patience=7)
-    epochs = 100
-    model_name = 'c-resunet.h5'
+    epochs = 200
+    model_name = 'c-resunt_v4.h5'
     Wloss = WeightedLoss(1, 1.5)
     #torch.autograd.set_detect_anomaly(True)
     for epoch in range(epochs):
@@ -76,18 +56,15 @@ def train():
             for i, data in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {epoch}")
                 optimizer.zero_grad()
-                x = model(data[0].permute(0, 3, 1, 2).float().to(device))
-                y = data[1].permute(0, 3, 1, 2).float().to(device)
+                # .permute(0, 3, 1, 2).float()
+                x = model(data[0].to(device))
+                y = data[1].to(device)
                 loss = Wloss(x, y)
                 loss.backward()
                 optimizer.step()
                 tepoch.set_postfix(loss=loss.item())
-                sleep(0.1)
-                #if i % 1 == 0:
-                #    print("Loss: {} batch {} on total of {}".format(loss.item(), i, len(train_loader)))
-
             ###############################################
-            # eval mode for evaluation on validation dataset
+            # eval mode for evaluation on validation dataset_loader
             ###############################################
             with torch.no_grad():
                 model.eval()
@@ -95,8 +72,8 @@ def train():
                 with tqdm(validation_loader, unit="batch") as vepoch:
                     for i, data in enumerate(vepoch):
                         optimizer.zero_grad()
-                        x = model(data[0].permute(0, 3, 1, 2).float().to(device))
-                        y = data[1].permute(0, 3, 1, 2).float().to(device)
+                        x = model(data[0].to(device))
+                        y = data[1].to(device)
                         loss = Wloss(x, y)
                         temp_val_loss += loss
                         if i % 10 == 0:
