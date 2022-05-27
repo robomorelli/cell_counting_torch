@@ -5,11 +5,14 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms import transforms as T
 import numpy as np
+from pathlib import Path
 
 def load_data_train_eval(batch_size=16, validation_split=0.3, num_workers = 0,
                          shuffle_dataset=True, random_seed=42, ngpus = 1):
 
-    root = "/davinci-1/home/morellir/artificial_intelligence/repos/cell_counting_torch/DATASET/train_val/crop_augmented/"
+    root = os.getcwd()
+    root = Path(root).as_posix()
+    root = root + '/DATASET/train_val/crop_augmented/'
     transform = T.Compose([T.Lambda(lambda x: x * 1. / 255),
                            T.ToTensor()
                           #T.Lambda(lambda x: x.permute(2, 0, 1))

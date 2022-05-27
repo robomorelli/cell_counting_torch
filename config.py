@@ -22,7 +22,7 @@ IMG_WIDTH = 1600
 IMG_HEIGHT = 1200
 
 root = os.getcwd()
-root = Path(root).parent.as_posix()
+root = Path(root).as_posix()
 
 OriginalImages = root + '/DATASET/original_images/images/'
 OriginalMasks = root + '/DATASET/original_masks/masks/'
