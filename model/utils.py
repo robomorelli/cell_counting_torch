@@ -7,19 +7,55 @@ from torchvision.transforms import transforms as T
 import numpy as np
 from pathlib import Path
 
-def load_data_train_eval(batch_size=16, validation_split=0.3, num_workers = 0,
-                         shuffle_dataset=True, random_seed=42, ngpus = 1):
+clip_x_to0 = 1e-4
+
+def SmashTo0(x):
+    return 0*x
+
+class InverseSquareRootLinearUnit(nn.Module):
+
+    def __init__(self, min_value=5e-3):
+        super(InverseSquareRootLinearUnit, self).__init__()
+        self.min_value = min_value
+
+    def forward(self, x):
+        return 1. + self.min_value \
+               + torch.where(torch.gt(x, 0), x, torch.div(x, torch.sqrt(1 + (x * x))))
+
+class ClippedTanh(nn.Module):
+
+    def __init__(self, min_value=5e-3):
+        super(ClippedTanh, self).__init__()
+
+    def forward(self, x):
+        return 0.5 * (1 + 0.999 * torch.tanh(x))
+
+class SmashTo0(nn.Module):
+
+    def __init__(self):
+        super(SmashTo0, self).__init__()
+
+    def forward(self, x):
+        return 0*x
+
+
+def load_data_train_eval(batch_size=16, validation_split=0.3, num_workers=0,
+                         shuffle_dataset=True, random_seed=42, ngpus=1, ae=None):
 
     root = os.getcwd()
     root = Path(root).as_posix()
-    root = root + '/DATASET/train_val/crop_augmented/'
+    if ae == "ae":
+        root = root + '/DATASET/train_val/crop_augmented_AE/'
+    else:
+        root = root + '/DATASET/train_val/crop_augmented/'
     transform = T.Compose([T.Lambda(lambda x: x * 1. / 255),
                            T.ToTensor()
                           #T.Lambda(lambda x: x.permute(2, 0, 1))
                            ])
-    cells_images = CellsLoader(root + "images/", root + "masks/", val_split=0.3, transform=transform)
+    cells_images = CellsLoader(root + "images/", root + "masks/", val_split=0.3, transform=transform, ae=ae)
 
     dataset_size = len(cells_images)
+    print('dataset size is {}'.format(dataset_size))
     indices = list(range(dataset_size))
     split = int(np.floor(validation_split * dataset_size))
 
@@ -82,7 +118,34 @@ def WeightedLoss(zero_weight, one_weight):
         weight_vector = class_weight_vector * y_true[:,1:2,:,:]
         weighted_b_ce = weight_vector * b_ce
 
+        #we should first make a sum reduction on rows and column and then take a mean over element of batch
+        #s1 = torch.sum(weighted_b_ce, axis=-2)
+        #s2 = torch.sum(s1, axis=-1)
+
         # Return the mean error
         return torch.mean(weighted_b_ce)
 
     return weighted_binary_crossentropy
+
+
+#def VAE_loss(bce_loss, mu, logvar):
+    #    """
+    #    This function will add the reconstruction loss (BCELoss) and the
+    #    KL-Divergence.
+    #    KL-Divergence = 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    #    :param bce_loss: recontruction loss
+    #    :param mu: the mean from the latent vector
+    #    :param logvar: log variance from the latent vector
+    #    """
+    #    BCE = bce_loss
+    #    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+#    return BCE + KLD
+
+def loss_VAE(mu, sigma, y):
+
+    au = 0.5*torch.log(2*np.pi*(sigma*sigma)) #aleatoric uncertainty
+    ne = (torch.square(mu - y))/(2*torch.square(sigma))#normalized error
+    nll_loss = au + ne
+
+    return torch.mean(nll_loss), au, ne
+

@@ -21,7 +21,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage.morphology import remove_small_objects, erosion
 from tqdm import tqdm
+import sys
+sys.path.append('../')
 from config import *
+
 
 IMG_CHANNELS = 3
 

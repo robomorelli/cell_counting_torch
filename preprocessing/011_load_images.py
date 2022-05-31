@@ -23,6 +23,9 @@ import shutil
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
+sys.path.append('../')
+from config import *
 
 from config import *
 

@@ -1,7 +1,7 @@
 import random as rn
 import numpy as np
 from model.resunet import *
-from model.utils import EarlyStopping, WeightedLoss, load_data_train_eval
+from model.utils import EarlyStopping, WeightedLoss, load_data_train_eval, loss_VAE
 from dataset_loader.image_loader import *
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -30,18 +30,12 @@ def train(ae=None):
 
     num_workers = 0
     bs = 16
-    if ae == 'ae':
-        train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,
-                                                               num_workers=num_workers, shuffle_dataset=True,
-                                                               random_seed=42, ngpus=ngpus, ae=ae)
-        model = nn.DataParallel(c_resunetAE(arch='c-ResUnetAE', n_features_start=16, n_out=3,
-                                          pretrained=False, progress=True).to(device))
 
-    else:
-        train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,
-                            num_workers=num_workers, shuffle_dataset=True, random_seed=42, ngpus=ngpus)
-        model = nn.DataParallel(c_resunet(arch='c-ResUnet', n_features_start = 16, n_out = 1,
-                                          pretrained = False, progress= True).to(device))
+    train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,
+                                                           num_workers=num_workers, shuffle_dataset=True,
+                                                           random_seed=42, ngpus=ngpus, ae=ae)
+    model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, n_out=1,
+                                      pretrained=False, progress=True).to(device))
 
     #Train Loop####
     """
@@ -56,13 +50,7 @@ def train(ae=None):
                                               threshold_mode='rel', cooldown=0, min_lr=9e-8, verbose=True)
     early_stopping = EarlyStopping(patience=patience)
 
-    model_name = 'test_loss_resunet.h5'
-
-    if ae:
-        criterion = nn.BCELoss()
-    else:
-        criterion = WeightedLoss(1, 1.5)
-
+    model_name = 'cvae_1.h5'
     #torch.autograd.set_detect_anomaly(True)
     for epoch in range(epochs):
         model.train()
@@ -70,10 +58,13 @@ def train(ae=None):
             for i, (image, target) in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {epoch}")
                 optimizer.zero_grad()
-                # .permute(0, 3, 1, 2).float()
-                x = model(image.to(device))
-                y = target.to(device)
-                loss = criterion(x, y)
+                mu, logvar, (mu_p, sigma_p)  = model(image.to(device))
+                y = target[:,0:1,:,:].to(device)
+                prediction_loss =nn.BCELoss()(mu_p, y)
+                #prediction_loss, au, ne = loss_VAE(mu_p, sigma_p, y)
+                KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                loss = prediction_loss
+
                 loss.backward()
                 optimizer.step()
                 tepoch.set_postfix(loss=loss.item())
@@ -86,9 +77,13 @@ def train(ae=None):
                 with tqdm(validation_loader, unit="batch") as vepoch:
                     for i, (image, target) in enumerate(vepoch):
                         optimizer.zero_grad()
-                        x = model(image.to(device))
-                        y = target.to(device)
-                        loss = criterion(x, y)
+                        mu, logvar, (mu_p, sigma_p) = model(image.to(device))
+                        y = target[:, 0:1, :, :].to(device)
+                        prediction_loss = nn.BCELoss()(mu_p, y)
+                        # prediction_loss, au, ne = loss_VAE(mu_p, sigma_p, y)
+                        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                        loss = prediction_loss
+
                         temp_val_loss += loss
                         if i % 10 == 0:
                             print("VALIDATION Loss: {} batch {} on total of {}".format(loss.item(),
@@ -114,5 +109,5 @@ if __name__ == "__main__":
     if not (save_model_path.exists()):
         print('creating path')
         os.makedirs(save_model_path)
-    ae = None
+    ae = 'vae' #['ae', 'vae']
     train(ae)

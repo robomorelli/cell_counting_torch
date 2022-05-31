@@ -24,6 +24,9 @@ IMG_HEIGHT = 1200
 root = os.getcwd()
 root = Path(root).as_posix()
 
+if root.split('/')[-1] != "cell_counting_torch":
+    root = Path(root).parent.as_posix()
+
 OriginalImages = root + '/DATASET/original_images/images/'
 OriginalMasks = root + '/DATASET/original_masks/masks/'
 
@@ -73,6 +76,7 @@ if not os.path.exists(CropImages):
 
 if not os.path.exists(CropMasks):
     os.makedirs(CropMasks)
+
 if not os.path.exists(CropWeightedMasks):
     os.makedirs(CropWeightedMasks)
 
@@ -90,24 +94,28 @@ AugCropMasksBasic = root + '/DATASET/train_val/crop_augmented_basic/masks/'
 AugCropImagesBasicSplitted = root + '/DATASET/train_val/crop_augmented_basic_splitted_images/images/'
 AugCropMasksBasicSplitted = root + '/DATASET/train_val/crop_augmented_basic_splitted_masks/masks/'
 
+AugCropImagesAE = root + '/DATASET/train_val/crop_augmented_AE/images/'
+AugCropMasksAE = root + '/DATASET/train_val/crop_augmented_AE/masks/'
+
 if not os.path.exists(AugCropImages):
     os.makedirs(AugCropImages)
-
 if not os.path.exists(AugCropMasks):
     os.makedirs(AugCropMasks)
 
 if not os.path.exists(AugCropImagesBasic):
     os.makedirs(AugCropImagesBasic)
-
 if not os.path.exists(AugCropMasksBasic):
     os.makedirs(AugCropMasksBasic)
 
-ModelResults = root + '/model_results_torch/'
+if not os.path.exists(AugCropImagesAE):
+    os.makedirs(AugCropImagesAE)
 
+ModelResults = root + '/model_results_torch/'
 ModelResultsRay = root + '/model_results_torch_ray/'
 
 if not os.path.exists(ModelResults):
     os.makedirs(ModelResults)
-
 if not os.path.exists(ModelResultsRay):
     os.makedirs(ModelResultsRay)
+
+

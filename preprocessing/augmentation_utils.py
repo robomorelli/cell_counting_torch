@@ -18,6 +18,8 @@ Created on Tue May  7 10:42:13 2019
 
 
 import random
+import numpy as np
+import PIL
 
 
 from albumentations import (RandomCrop,CenterCrop,ElasticTransform,RGBShift,Rotate,
@@ -231,7 +233,41 @@ def data_aug(image ,mask, image_id, nlabels_tar, minimum, maximum):
 
 
 def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_start_new_images,
-                           split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix,  unique_split, no_artifact_aug):
+                           split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix,  unique_split, no_artifact_aug, ae=False):
+
+    if ae:
+        SaveAugImages = AugCropImagesAE
+
+        tot = len(image_ids)
+        for ax_index, image_id in enumerate(image_ids):
+
+            ID = int(image_id.split('.')[0])
+            image, _ = read_image_masks(image_id, images_path, masks_path)
+
+            split_num_im = 1
+
+            print('image {} on {} params: {}-{}'.format(ax_index, tot, ID, split_num_im))
+
+            for i in range(split_num_im):
+                elastic = random.random()
+                RGB_noise = SaltAndPepperNoise(noiseType="SnP")
+                new_image = RGB_noise(image)
+
+                if elastic < 0.5:
+                    alfa = random.choice([30, 30, 40, 40, 40, 50, 60])
+                    alfa_affine = random.choice([40, 50, 50, 75, 75])
+                    sigma = random.choice([20, 30, 30, 40, 50])
+                    elastic = elastic_def(alfa, alfa_affine, sigma, p=1)
+                    data = {"image": new_image}
+                    augmented = elastic(**data)
+                    new_image = augmented["image"]
+
+                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                ix += 1
+                plt.imsave(fname=aug_img_dir, arr=new_image)
+
+        return
+
 
     if (no_artifact_aug) | (unique_split):
         SaveAugImages = AugCropImagesBasic
@@ -276,8 +312,8 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
 
                 new_mask[:,:,1:2] =np.clip(new_mask[:,:,1:2], minimum, maximum)
 
-                aug_img_dir = SaveAugImages + '{}.tiff'.format(ix)
-                aug_mask_dir = SaveAugMasks + '{}.tiff'.format(ix)
+                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
                 ix +=1
 
                 plt.imsave(fname=aug_img_dir, arr = new_image)
@@ -298,8 +334,9 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
 
                 new_mask[:,:,1:2] =np.clip(new_mask[:,:,1:2], minimum, maximum)
 
-                aug_img_dir = SaveAugImages + '{}.tiff'.format(ix)
-                aug_mask_dir = SaveAugMasks + '{}.tiff'.format(ix)
+                #'{}.tiff'.format(ix)
+                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
                 ix +=1
 
                 plt.imsave(fname=aug_img_dir, arr = new_image)
@@ -315,8 +352,8 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
                 augmented = gaussian_blur(**data)
                 new_image = augmented["image"]
 
-                aug_img_dir = SaveAugImages + '{}.tiff'.format(ix)
-                aug_mask_dir = SaveAugMasks + '{}.tiff'.format(ix)
+                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
                 ix +=1
 
                 plt.imsave(fname=aug_img_dir, arr = new_image)
@@ -326,13 +363,70 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
 
             for i in range(split_num_im):
 
-                new_image, new_mask = data_aug(image, mask, image_id, nlabels_tar,minimum, maximum)
+                new_image, new_mask = data_aug(image, mask, image_id, nlabels_tar, minimum, maximum)
 
-                aug_img_dir = SaveAugImages + '{}.tiff'.format(ix)
-                aug_mask_dir = SaveAugMasks + '{}.tiff'.format(ix)
-                ix +=1
+                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                ix += 1
 
                 plt.imsave(fname=aug_img_dir, arr = new_image)
                 plt.imsave(fname=aug_mask_dir, arr = new_mask)
 
     return
+
+
+class SaltAndPepperNoise(object):
+    r""" Implements 'Salt-and-Pepper' noise
+    Adding grain (salt and pepper) noise
+    (https://en.wikipedia.org/wiki/Salt-and-pepper_noise)
+
+    assumption: high values = white, low values = black
+
+    Inputs:
+            - threshold (float):
+            - imgType (str): {"cv2","PIL"}
+            - lowerValue (int): value for "pepper"
+            - upperValue (int): value for "salt"
+            - noiseType (str): {"SnP", "RGB"}
+    Output:
+            - image ({np.ndarray, PIL.Image}): image with
+                                               noise added
+    """
+
+    def __init__(self,
+                 treshold: float = 0.005,
+                 imgType: str = "cv2",
+                 lowerValue: int = 5,
+                 upperValue: int = 250,
+                 noiseType: str = "SnP"):
+        self.treshold = treshold
+        self.imgType = imgType
+        self.lowerValue = lowerValue  # 255 would be too high
+        self.upperValue = upperValue  # 0 would be too low
+        if (noiseType != "RGB") and (noiseType != "SnP"):
+            raise Exception("'noiseType' not of value {'SnP', 'RGB'}")
+        else:
+            self.noiseType = noiseType
+        super(SaltAndPepperNoise).__init__()
+
+    def __call__(self, img):
+        if self.imgType == "PIL":
+            img = np.array(img)
+        if type(img) != np.ndarray:
+            raise TypeError("Image is not of type 'np.ndarray'!")
+
+        if self.noiseType == "SnP":
+            random_matrix = np.random.rand(img.shape[0], img.shape[1])
+            img[random_matrix >= (1 - self.treshold)] = self.upperValue
+            img[random_matrix <= self.treshold] = self.lowerValue
+        elif self.noiseType == "RGB":
+            random_matrix = np.random.random(img.shape)
+            img[random_matrix >= (1 - self.treshold)] = self.upperValue
+            img[random_matrix <= self.treshold] = self.lowerValue
+
+        if self.imgType == "cv2":
+            return img
+        elif self.imgType == "PIL":
+            # return as PIL image for torchvision transforms compliance
+            return PIL.Image.fromarray(img)
+

@@ -21,9 +21,10 @@ import argparse
 import shutil
 
 from augmentation_utils import *
-from config import *
 from utils import *
-import os
+import sys
+sys.path.append('../config.py')
+from config import *
 
 if __name__ == "__main__":
 
@@ -60,42 +61,49 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    ae = False
+
     if args.start_from_zero:
         print('deleting existing files in destination folder')
-        if (args.no_artifact_aug) | (args.unique_split):
-            try:
-                shutil.rmtree(AugCropImagesBasic)
-            except:
-                pass
-            os.makedirs(AugCropImagesBasic,exist_ok=True)
-            try:
-                shutil.rmtree(AugCropMasksBasic)
-            except:
-                pass
-            os.makedirs(AugCropMasksBasic,exist_ok=True)
-            path_images = AugCropImagesBasic
-            path_masks = AugCropMasksBasic
+        if not ae:
+            if (args.no_artifact_aug) | (args.unique_split):
+                try:
+                    shutil.rmtree(AugCropImagesBasic)
+                except:
+                    pass
+                os.makedirs(AugCropImagesBasic,exist_ok=True)
+                try:
+                    shutil.rmtree(AugCropMasksBasic)
+                except:
+                    pass
+                os.makedirs(AugCropMasksBasic,exist_ok=True)
+                path_images = AugCropImagesBasic
+                path_masks = AugCropMasksBasic
+            else:
+                try:
+                    shutil.rmtree(AugCropImages)
+                except:
+                    pass
+                os.makedirs(AugCropImages,exist_ok=True)
+                try:
+                    shutil.rmtree(AugCropMasks)
+                except:
+                    pass
+                os.makedirs(AugCropMasks,exist_ok=True)
+                path_images = AugCropImages
+                path_masks = AugCropMasks
         else:
             try:
-                shutil.rmtree(AugCropImages)
+                shutil.rmtree(AugCropImagesAE)
             except:
                 pass
-            os.makedirs(AugCropImages,exist_ok=True)
-            try:
-                shutil.rmtree(AugCropMasks)
-            except:
-                pass
-            os.makedirs(AugCropMasks,exist_ok=True)
-            path_images = AugCropImages
-            path_masks = AugCropMasks
+            os.makedirs(AugCropImagesAE, exist_ok=True)
+
+            os.makedirs(AugCropMasksAE, exist_ok=True)
+            path_images = AugCropImagesAE
+            path_masks = None
 
     src_files = os.listdir(CropImages)
-    # src_files_i.sort()
-    # src_files_m = os.listdir(CropWeightedMasks)
-    # src_files_m.sort()
-
-    # limits = min((len(src_files_i), len(src_files_m)))
-
     if not args.copy_images:
         print('copying images')
         for file_name in src_files:
@@ -103,7 +111,7 @@ if __name__ == "__main__":
             if os.path.isfile(full_file_name):
                 shutil.copy(full_file_name, path_images)
 
-    if not args.copy_masks:
+    if not args.copy_masks and not ae:
         print('copying masks')
         for file_name in src_files:
             full_file_name = os.path.join(CropWeightedMasks, file_name)
@@ -112,5 +120,5 @@ if __name__ == "__main__":
 
     make_data_augmentation(image_ids, CropImages,  CropWeightedMasks, args.split_num, id_new_images,
                            args.split_num_new_images, id_edges, path_images, path_masks,  shift
-                           , args.unique_split, args.no_artifact_aug
+                           , args.unique_split, args.no_artifact_aug, ae = ae
                            )
