@@ -26,7 +26,7 @@ import sys
 sys.path.append('../config.py')
 from config import *
 
-if __name__ == "__main__":
+def main(ae, args):
 
     image_ids = os.listdir(CropImages)
     image_ids.sort()
@@ -38,30 +38,9 @@ if __name__ == "__main__":
             dic = pickle.load(handle)
         id_new_images = dic['id_new_images']
     except:
-        id_new_images = int(0.8*shift)
+        id_new_images = int(0.8 * shift)
 
     print(id_new_images)
-
-    parser = argparse.ArgumentParser(description='Define augmentation setting....default mode to follow the paper description')
-    parser.add_argument('--start_from_zero',action='store_false', help='remove previous file in the destination folder')
-
-    parser.add_argument('--split_num', nargs="?", type=int, default=4, help='augmentation factor for the images segmented automatically')
-    parser.add_argument('--split_num_new_images', nargs="?", type=int, default=10, help='augmentation factor fot the images segmented manually')
-
-    parser.add_argument('--copy_images', action='store_const', const=True, default=False,
-                        help='copy cropped in crop_aug images')
-    parser.add_argument('--copy_masks', action='store_const', const=True, default=False,
-                        help='copy cropped in crop_aug masks')
-
-    parser.add_argument('--unique_split', type=int, default=0,
-                        help='default is 0, define a different number and the same split factor will be used for all the images (automatically and manually segmented)'
-                             'ptherwise the split_num and split_num_new_images num will be applied for the autotamitaccli and manually segmentede images respectively')
-    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=False,
-                        help='run basic augmentation')
-
-    args = parser.parse_args()
-
-    ae = False
 
     if args.start_from_zero:
         print('deleting existing files in destination folder')
@@ -71,12 +50,12 @@ if __name__ == "__main__":
                     shutil.rmtree(AugCropImagesBasic)
                 except:
                     pass
-                os.makedirs(AugCropImagesBasic,exist_ok=True)
+                os.makedirs(AugCropImagesBasic, exist_ok=True)
                 try:
                     shutil.rmtree(AugCropMasksBasic)
                 except:
                     pass
-                os.makedirs(AugCropMasksBasic,exist_ok=True)
+                os.makedirs(AugCropMasksBasic, exist_ok=True)
                 path_images = AugCropImagesBasic
                 path_masks = AugCropMasksBasic
             else:
@@ -84,12 +63,12 @@ if __name__ == "__main__":
                     shutil.rmtree(AugCropImages)
                 except:
                     pass
-                os.makedirs(AugCropImages,exist_ok=True)
+                os.makedirs(AugCropImages, exist_ok=True)
                 try:
                     shutil.rmtree(AugCropMasks)
                 except:
                     pass
-                os.makedirs(AugCropMasks,exist_ok=True)
+                os.makedirs(AugCropMasks, exist_ok=True)
                 path_images = AugCropImages
                 path_masks = AugCropMasks
         else:
@@ -118,7 +97,37 @@ if __name__ == "__main__":
             if os.path.isfile(full_file_name):
                 shutil.copy(full_file_name, path_masks)
 
-    make_data_augmentation(image_ids, CropImages,  CropWeightedMasks, args.split_num, id_new_images,
-                           args.split_num_new_images, id_edges, path_images, path_masks,  shift
-                           , args.unique_split, args.no_artifact_aug, ae = ae
+    make_data_augmentation(image_ids, CropImages, CropWeightedMasks, args.split_num, id_new_images,
+                           args.split_num_new_images, id_edges, path_images, path_masks, shift
+                           , args.unique_split, args.no_artifact_aug, ae=ae
                            )
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(
+        description='Define augmentation setting....default mode to follow the paper description')
+    parser.add_argument('--start_from_zero', action='store_false',
+                        help='remove previous file in the destination folder')
+
+    parser.add_argument('--split_num', nargs="?", type=int, default=4,
+                        help='augmentation factor for the images segmented automatically')
+    parser.add_argument('--split_num_new_images', nargs="?", type=int, default=10,
+                        help='augmentation factor fot the images segmented manually')
+
+    parser.add_argument('--copy_images', action='store_const', const=True, default=False,
+                        help='copy cropped in crop_aug images')
+    parser.add_argument('--copy_masks', action='store_const', const=True, default=False,
+                        help='copy cropped in crop_aug masks')
+
+    parser.add_argument('--unique_split', type=int, default=0,
+                        help='default is 0, define a different number and the same split factor will be used for all the images (automatically and manually segmented)'
+                             'ptherwise the split_num and split_num_new_images num will be applied for the autotamitaccli and manually segmentede images respectively')
+    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=True,
+                        help='run basic augmentation')
+
+    args = parser.parse_args()
+
+    ae = False
+
+    main(ae, args)

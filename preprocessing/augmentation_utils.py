@@ -235,6 +235,9 @@ def data_aug(image ,mask, image_id, nlabels_tar, minimum, maximum):
 def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_start_new_images,
                            split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix,  unique_split, no_artifact_aug, ae=False):
 
+    if no_artifact_aug:
+        print('no artifact aug')
+
     if ae:
         SaveAugImages = AugCropImagesAE
 
@@ -269,7 +272,7 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
         return
 
 
-    if (no_artifact_aug) | (unique_split):
+    if (no_artifact_aug) or (unique_split):
         SaveAugImages = AugCropImagesBasic
         SaveAugMasks = AugCropMasksBasic
 

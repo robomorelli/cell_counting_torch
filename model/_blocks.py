@@ -10,11 +10,12 @@
 #  #WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  #See the License for the specific language governing permissions and
 #  #limitations under the License.
-__all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'UpResidualBlock', "Bottleneck",
-           'Heatmap', 'Heatmap2d', "BottleneckVAE", 'HeatmapVAE']
+__all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'UpResidualBlock', 'Bottleneck',
+           'Heatmap', 'Heatmap2d', 'UpResidualBlockVAE', 'BottleneckVAE' , 'HeatmapVAE', 'HeatmapVAERecon']
 
 from fastai.vision.all import *
 from ._utils import *
+from model.utils import InverseSquareRootLinearUnit, Dec1, ConstrainedConv2d
 
 
 # Utils
@@ -182,35 +183,40 @@ class Bottleneck(nn.Module):
     def forward(self, x):
         return self.residual_block2(self.residual_block1(x))
 
-#class BottleneckVAE(nn.Module):
-        #    def __init__(self, n_in, hidden_dim, latent_dim):
-        #        super(BottleneckVAE, self).__init__()
 
-        # fully connected layers for learning representations
-        #        self.fc1 = nn.Linear(n_in, hidden_dim)
-        #        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
-    #        self.fc_log_var = nn.Linear(hidden_dim, latent_dim)
-
-        #    def forward(self, x):
-#        return self.fc_mu(self.fc1(x)), self.fc_log_var(self.fc1(x))
 
 class BottleneckVAE(nn.Module):
-    def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):
+    def __init__(self, n_in, n_out, kernel_size=5, stride=1,
+                 padding=2, featureDim=128*64*64, zDim=64):
         super(BottleneckVAE, self).__init__()
 
-        #self.residual_block1 = ResidualBlock(n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
-        #                                     is_conv=True)
-        #self.residual_block2 = ResidualBlock(n_out, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
-        #                                     is_conv=False)
+        self.residual_block1 = ResidualBlock(n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
+                                             is_conv=True)
+        self.residual_block2 = ResidualBlock(n_out, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
+                                             is_conv=False)
 
-        #self.conv2d_mu = nn.Conv2d(n_out, 1, 1, stride, padding=0)
-        #self.conv2d_sigma = nn.Conv2d(n_out, 1, 1, stride, padding=0)
+        self.encFC1 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
+        self.encFC2 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
 
-        self.conv2d_mu = nn.Conv2d(n_in, 1, 1, stride, padding=0)
-        self.conv2d_sigma = nn.Conv2d(n_in, 1, 1, stride, padding=0)
+        #self.encFC1 = nn.Linear(featureDim, zDim)
+        #self.encFC2 = nn.Linear(featureDim, zDim)
+        self.act_sigma = InverseSquareRootLinearUnit()
+        self.featureDim = featureDim
 
     def forward(self, x):
-        return self.conv2d_mu(x), nn.ReLU()((self.conv2d_sigma(x)))
+        x = self.residual_block2(self.residual_block1(x))
+        #x = x.view(-1, self.featureDim)
+        return self.encFC1(x), self.act_sigma(self.encFC2(x)), x
+
+#class BottleneckVAE(nn.Module):
+        #    def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):
+        #        super(BottleneckVAE, self).__init__()
+        #
+        #        self.conv2d_mu = nn.Conv2d(n_in, 1, 1, stride, padding=0)
+    #        self.conv2d_sigma = nn.Conv2d(n_in, 1, 1, stride, padding=0)
+    #
+        #    def forward(self, x):
+#        return self.conv2d_mu(x), nn.ReLU()((self.conv2d_sigma(x)))
         #return self.conv2d_mu(self.residual_block2(self.residual_block1(x))), self.conv2d_sigma(self.residual_block2(self.residual_block1(x)))
 
 
@@ -230,6 +236,21 @@ class UpResidualBlock(nn.Module):
         concat = self.id_path.concat([short_connect, long_connect])
         return self.add(self.conv_path(concat), short_connect)
 
+class UpResidualBlockVAE(nn.Module):
+    def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
+        super(UpResidualBlockVAE, self).__init__()
+        self.id_path = nn.ModuleDict({
+            "up_conv": nn.ConvTranspose2d(n_in, n_out, kernel_size=2, stride=2, padding=0),
+            "concat": Concatenate(dim=concat_dim)
+        })
+        self.conv_path = ConvBlock(
+            n_in*2, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.add = Add()
+
+    def forward(self, x, long_connect):
+        short_connect = self.id_path.up_conv(x)
+        concat = self.id_path.concat([short_connect, long_connect])
+        return self.add(self.conv_path(concat), short_connect)
 
 class Heatmap(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
@@ -243,14 +264,25 @@ class Heatmap(nn.Module):
 class HeatmapVAE(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
         super(HeatmapVAE, self).__init__()
-        self.conv2d_mu = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        self.conv2d_sigma = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        self.act_mu = nn.Sigmoid()
-        self.act_sigma = nn.ReLU()
+        self.conv2d = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
+        #self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        self.act = nn.Sigmoid()
 
     def forward(self, x):
-        return self.act_mu(self.conv2d_mu(x)), self.act_sigma(self.conv2d_sigma(x))
+        return self.act(self.conv2d(x))
 
+class HeatmapVAERecon(nn.Module):
+    def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
+        super(HeatmapVAERecon, self).__init__()
+        self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        self.ConstrainedConv2d_sigma = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        #self.conv2d_mu = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
+        #self.conv2d_sigma = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
+        self.act_mu = nn.Sigmoid()
+        self.act_sigma = InverseSquareRootLinearUnit() #self.act_sigma = nn.Softplus()
+
+    def forward(self, x):
+        return self.act_mu(self.ConstrainedConv2d_mu(x)), self.act_sigma(self.ConstrainedConv2d_sigma(x))
 
 class Heatmap2d(nn.Module):
     def __init__(self, n_in, n_out=2, kernel_size=1, stride=1, padding=0, concat_dim=1):

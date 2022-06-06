@@ -10,11 +10,12 @@
 #  #WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  #See the License for the specific language governing permissions and
 #  #limitations under the License.
-__all__ = ['ResUnet', 'c_resunet', 'ResUnetAE', 'c_resunetAE', 'ResUnetVAE', 'c_resunetVAE']
+__all__ = ['ResUnet', 'c_resunet', 'ResUnetAE', 'c_resunetAE', 'ResUnetVAE', 'c_resunetVAE', '_resunetVAE']
 
 from fastai.vision.all import *
 from ._blocks import *
 from ._utils import *
+from model.utils import InverseSquareRootLinearUnit, Dec1, ConstrainedConv2d
 #from fluocells.config import MODELS_PATH
 
 
@@ -113,6 +114,7 @@ class ResUnetAE(nn.Module):
         super(ResUnetAE, self).__init__()
         pool_ks, pool_stride, pool_pad = 2, 2, 0
 
+
         self.encoder = nn.ModuleDict({
             'colorspace': nn.Conv2d(3, 1, kernel_size=1, padding=0),
 
@@ -197,12 +199,18 @@ def _resunetAE(
     return model
 
 class ResUnetVAE(nn.Module):
-    def __init__(self, n_features_start=16, latent_dim=32, n_out=1):
+    def __init__(self, n_features_start=16, zDim=64, n_out=1, n_outRec=3):
         super(ResUnetVAE, self).__init__()
         pool_ks, pool_stride, pool_pad = 2, 2, 0
 
+        self.act2 = InverseSquareRootLinearUnit()
+        self.n_out = n_out
+        self.n_outRec = n_outRec
+        self.zDim = zDim
+        self.n_features_start = n_features_start
+
         self.encoder = nn.ModuleDict({
-            'colorspace': nn.Conv2d(3, 1, kernel_size=1, padding=0),
+            #'colorspace': nn.Conv2d(3, 1, kernel_size=1, padding=0),
 
             # block 1
             'conv_block': ConvBlock(1, n_features_start),
@@ -217,25 +225,45 @@ class ResUnetVAE(nn.Module):
             'pool3': nn.MaxPool2d(pool_ks, pool_stride, pool_pad),
 
             # bottleneck
-            'bottleneckVAE': BottleneckVAE(4 * n_features_start, 2)
+            #'bottleneck': BottleneckVAE(4 * n_features_start, 8 * n_features_start, kernel_size=5, padding=2,
+            #                            featureDim=8 * self.n_features_start*64*64, zDim=64),
+            'bottleneck': BottleneckVAE(4 * n_features_start, 8 * n_features_start, kernel_size=5, padding=2,
+                                        featureDim=4 * self.n_features_start * 64 * 64, zDim=zDim),
         })
 
-        self.pre_up = nn.Conv2d(1, 8 * n_features_start, kernel_size=1, stride=1, padding=0)
+        #self.pre_up = Dec1(64, 128 * 64 * 64) # switch to (64, 128*64*64)>>>upconv_block:UpResidualBlock(n_in=8 * n_features_start, n_out=4 * n_features_start)
+        #self.pre_up = Dec1(zDim, 64 * 64 * 64)
+        self.pre_up  = nn.ConvTranspose2d(1, 8 * n_features_start, 1, 1, padding=0)
+
 
         self.decoder = nn.ModuleDict({
             # block 6
             'upconv_block1': UpResidualBlock(n_in=8 * n_features_start, n_out=4 * n_features_start),
+            #'upconv_block1': UpResidualBlockVAE(n_in=4 * n_features_start, n_out=4 * n_features_start),
 
             # block 7
             'upconv_block2': UpResidualBlock(4 * n_features_start, 2 * n_features_start),
 
             # block 8
-            'upconv_block3': UpResidualBlock(2 * n_features_start, n_features_start),
+            'upconv_block3': UpResidualBlock(2*n_features_start, n_features_start),
         })
 
-        self.head = HeatmapVAE(n_features_start, n_out, kernel_size=1, stride=1, padding=0)
+        self.decoder_segm = nn.ModuleDict({
+            # block 6
+            'upconv_block1': UpResidualBlock(n_in=8 * n_features_start, n_out=4 * n_features_start),
+            #'upconv_block1': UpResidualBlockVAE(n_in=4 * n_features_start, n_out=4 * n_features_start),
 
-    def reparameterize(self, mu, log_var):
+            # block 7
+            'upconv_block2': UpResidualBlock(4 * n_features_start, 2 * n_features_start),
+
+            # block 8
+            'upconv_block3': UpResidualBlock(2*n_features_start, n_features_start),
+        })
+
+        self.head = HeatmapVAE(self.n_features_start, self.n_out, kernel_size=1, stride=1, padding=0)
+        self.headRec = HeatmapVAERecon(self.n_features_start, self.n_outRec, kernel_size=1, stride=1, padding=0)
+
+    def reparameterize_logvar(self, mu, log_var):
         """
         :param mu: mean from the encoder's latent space
         :param log_var: log variance from the encoder's latent space
@@ -245,21 +273,46 @@ class ResUnetVAE(nn.Module):
         sample = mu + (eps * std) # sampling
         return sample
 
+    def reparameterize(self, mu, sigma):
+        """
+        :param mu: mean from the encoder's latent space
+        :param log_var: log variance from the encoder's latent space
+        """
+        std = sigma # standard deviation
+        eps = torch.randn_like(std) # `randn_like` as we need the same size
+        sample = mu + (eps * std) # sampling
+        return sample
+
     def _forward_impl(self, x: Tensor) -> Tensor:
         downblocks = []
         for lbl, layer in self.encoder.items():
             if "bottle" in lbl:
-                mu, log_var = layer(x)
+                mu, sigma, x = layer(x)
+                sigma = self.act2(sigma)
             else:
                 x = layer(x)
+                if "color" in lbl:
+                    gray_rgb = x
             if 'block' in lbl: downblocks.append(x)
 
-        z = self.reparameterize(mu, log_var)
+        # after bottleneck x came back to (bs,64,64,64) size becauese the view is used inside the bottnk block
+        z = self.reparameterize(mu, sigma)
         z = self.pre_up(z)
+        #x = nn.ReLU()(x) # TO REMOVE
+        #x = x.view(-1, self.n_features_start * 4, 64, 64) #x = x.view(-1, self.n_features_start*8, 64, 64)
+        # To xcomment passing to convolutional
         for layer, long_connect in zip(self.decoder.values(), reversed(downblocks)): #downblock store the long connection
             z = layer(z, long_connect)
-        out = self.head(z)
-        return mu, log_var, out
+        recon_out = self.headRec(z)
+
+        for layer, long_connect in zip(self.decoder_segm.values(), reversed(downblocks)): #downblock store the long connection
+            x = layer(x, long_connect)
+        segm_out = self.head(x)
+
+        return mu, sigma, segm_out, recon_out
+        #return gray_rgb, mu, sigma, segm_out, recon_out
+
+
 
     def init_kaiming_normal(self, mode='fan_in'):
         print('Initializing conv2d weights with Kaiming He normal')
@@ -276,14 +329,16 @@ class ResUnetVAE(nn.Module):
 def _resunetVAE(
         arch: str,
         n_features_start: int,
+        zDim: int,
         n_out: int,
+        n_outRec: int,
         #     block: Type[Union[BasicBlock, Bottleneck]],
         #     layers: List[int],
         pretrained: bool,
         progress: bool,
         **kwargs,
 ) -> ResUnet:
-    model = ResUnetVAE(n_features_start, n_out)  # , **kwargs)
+    model = ResUnetVAE(n_features_start, zDim , n_out,  n_outRec)  # , **kwargs)
     model.__name__ = arch
     # TODO: implement weights fetching if not present
     if pretrained:
@@ -324,8 +379,8 @@ def c_resunetAE(arch='c-ResUnetAE', n_features_start: int = 16, n_out: int = 3, 
     return _resunetAE(arch=arch, n_features_start=n_features_start, n_out=n_out, pretrained=pretrained,
                     progress=progress, **kwargs)
 
-def c_resunetVAE(arch='c-ResUnetVAE', n_features_start: int = 16, n_out: int = 1, pretrained: bool = False,
-              progress: bool = True,
+def c_resunetVAE(arch='c-ResUnetVAE', n_features_start: int = 16, zDim: int = 64, n_out: int = 3,  n_outRec=3,
+                 pretrained: bool = False, progress: bool = True,
               **kwargs) -> ResUnet:
     r"""cResUnet model from `"Automating Cell Counting in Fluorescent Microscopy through Deep Learning with c-ResUnet"
     <https://www.nature.com/articles/s41598-021-01929-5>`_.
@@ -333,5 +388,5 @@ def c_resunetVAE(arch='c-ResUnetVAE', n_features_start: int = 16, n_out: int = 1
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resunetVAE(arch=arch, n_features_start=n_features_start, n_out=n_out, pretrained=pretrained,
-                    progress=progress, **kwargs)
+    return _resunetVAE(arch=arch, n_features_start=n_features_start, zDim = zDim, n_out=n_out,  n_outRec=n_outRec,
+                       pretrained=pretrained, progress=progress, **kwargs)
