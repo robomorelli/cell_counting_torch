@@ -21,6 +21,10 @@ import random
 import numpy as np
 import PIL
 
+import sys
+sys.path.append('../')
+from config import *
+from utils import *
 
 from albumentations import (RandomCrop,CenterCrop,ElasticTransform,RGBShift,Rotate,
     Compose, ToFloat, FromFloat, RandomRotate90, Flip, OneOf, MotionBlur, MedianBlur, Blur,Transpose,
@@ -29,8 +33,7 @@ from albumentations import (RandomCrop,CenterCrop,ElasticTransform,RGBShift,Rota
     HueSaturationValue,
 )
 
-from utils import *
-from config import *
+
 
 IMG_WIDTH = 1600
 IMG_HEIGTH = 1200
