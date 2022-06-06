@@ -19,10 +19,10 @@ from config import *
 
 
 
-np.random.seed(42)
+np.random.seed(40)
 # The below is necessary for starting core Python generated random numbers
 # in a well-defined state.
-rn.seed(123456)
+rn.seed(333)
 
 def train(ae=None):
     cuda = torch.cuda.is_available()
@@ -34,7 +34,7 @@ def train(ae=None):
     else:
         ngpus=1
 
-    num_workers = 0
+    num_workers = 48
     bs = 16
     if ae == 'ae':
         n_out=3
@@ -44,7 +44,7 @@ def train(ae=None):
                                                            num_workers=num_workers, shuffle_dataset=True,
                                                            random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_noLongConn_hpc.h5'
+    model_name = 'hydra_noLongConn_hpc_seed.h5'
     resume = False
 
     if resume:
