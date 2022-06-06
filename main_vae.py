@@ -40,12 +40,12 @@ def train(ae=None):
         n_out=3
 
     train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,images_path=AugCropImages
-                                                           , masks_path=AugCropMasks, grayscale = True,
+                                                           , masks_path=AugCropMasks, grayscale = False,
                                                            num_workers=num_workers, shuffle_dataset=True,
                                                            random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_gray.h5'
-    resume = True
+    model_name = 'hydra_noLongConn.h5'
+    resume = False
 
     if resume:
         resume_path = ModelResults + model_name
@@ -82,11 +82,12 @@ def train(ae=None):
     Set the model to the training mode first and train
     """
     val_loss = 10 ** 16
-    patience = 8
+    patience = 5
+    patience_lr = 3
     lr = 0.003
     epochs = 200
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience, threshold=0.0001,
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr, threshold=0.0001,
                                               threshold_mode='rel', cooldown=0, min_lr=9e-8, verbose=True)
     early_stopping = EarlyStopping(patience=patience)
 
@@ -104,12 +105,12 @@ def train(ae=None):
 
                 y = target.to(device)
                 x = image.to(device)
-                #gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                #mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                 segm_loss = criterion(segm, y)
-                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
+                #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
+                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
 
                 #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 #KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
@@ -133,12 +134,12 @@ def train(ae=None):
 
                         y = target.to(device)
                         x = image.to(device)
-                        #gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                        mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        #mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                         segm_loss = criterion(segm, y)
-                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                        #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
+                        #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
+                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
 
                         # KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                         # KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)

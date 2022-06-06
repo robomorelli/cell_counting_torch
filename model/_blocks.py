@@ -11,7 +11,8 @@
 #  #See the License for the specific language governing permissions and
 #  #limitations under the License.
 __all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'UpResidualBlock', 'Bottleneck',
-           'Heatmap', 'Heatmap2d', 'UpResidualBlockVAE', 'BottleneckVAE' , 'HeatmapVAE', 'HeatmapVAERecon']
+           'Heatmap', 'Heatmap2d', 'UpResidualBlockVAE', 'BottleneckVAE' , 'HeatmapVAE', 'HeatmapVAERecon',
+           'UpResidualBlockVAENoConcat']
 
 from fastai.vision.all import *
 from ._utils import *
@@ -251,6 +252,20 @@ class UpResidualBlockVAE(nn.Module):
         short_connect = self.id_path.up_conv(x)
         concat = self.id_path.concat([short_connect, long_connect])
         return self.add(self.conv_path(concat), short_connect)
+
+class UpResidualBlockVAENoConcat(nn.Module):
+    def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
+        super(UpResidualBlockVAENoConcat, self).__init__()
+        self.id_path = nn.ModuleDict({
+            "up_conv": nn.ConvTranspose2d(n_in, n_out, kernel_size=2, stride=2, padding=0),
+        })
+        self.conv_path = ConvBlock(
+            n_in*2, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.add = Add()
+
+    def forward(self, x):
+        short_connect = self.id_path.up_conv(x)
+        return short_connect
 
 class Heatmap(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
