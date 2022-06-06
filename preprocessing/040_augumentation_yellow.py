@@ -123,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument('--unique_split', type=int, default=0,
                         help='default is 0, define a different number and the same split factor will be used for all the images (automatically and manually segmented)'
                              'ptherwise the split_num and split_num_new_images num will be applied for the autotamitaccli and manually segmentede images respectively')
-    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=True,
+    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=False,
                         help='run basic augmentation')
 
     args = parser.parse_args()

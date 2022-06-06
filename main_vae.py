@@ -44,7 +44,7 @@ def train(ae=None):
                                                            num_workers=num_workers, shuffle_dataset=True,
                                                            random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_noLongConn.h5'
+    model_name = 'hydra_noLongConn_hpc.h5'
     resume = False
 
     if resume:
