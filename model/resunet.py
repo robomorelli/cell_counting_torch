@@ -236,7 +236,7 @@ class ResUnetVAE(nn.Module):
         self.pre_up  = nn.ConvTranspose2d(1, 8 * n_features_start, 1, 1, padding=0)
 
 
-        self.decoder = nn.ModuleDict({
+        self.decoder_segm = nn.ModuleDict({
             # block 6
             'upconv_block1': UpResidualBlock(n_in=8 * n_features_start, n_out=4 * n_features_start),
             #'upconv_block1': UpResidualBlockVAE(n_in=4 * n_features_start, n_out=4 * n_features_start),
@@ -248,7 +248,7 @@ class ResUnetVAE(nn.Module):
             'upconv_block3': UpResidualBlock(2*n_features_start, n_features_start),
         })
 
-        self.decoder_segm = nn.ModuleDict({
+        self.decoder_rec = nn.ModuleDict({
             # block 6
             'upconv_block1NoConcat': UpResidualBlockVAENoConcat(n_in=8 * n_features_start, n_out=4 * n_features_start),
             #'upconv_block1': UpResidualBlockVAE(n_in=4 * n_features_start, n_out=4 * n_features_start),
@@ -260,7 +260,20 @@ class ResUnetVAE(nn.Module):
             'upconv_block3NoConcat': UpResidualBlockVAENoConcat(2*n_features_start, n_features_start),
         })
 
+        self.decoder_conc = nn.ModuleDict({
+            # block 6
+            'upconv_block1NoConv': UpResidualBlockVAENoConv(n_in=8 * n_features_start, n_out=4 * n_features_start),
+            #'upconv_block1': UpResidualBlockVAE(n_in=4 * n_features_start, n_out=4 * n_features_start),
+
+            # block 7
+            'upconv_block2NoConv': UpResidualBlockVAENoConv(4 * n_features_start, 2 * n_features_start),
+
+            # block 8
+            'upconv_block3NoConv': UpResidualBlockVAENoConv(2*n_features_start, n_features_start),
+        })
+
         self.head = HeatmapVAE(self.n_features_start, self.n_out, kernel_size=1, stride=1, padding=0)
+        self.headConc = nn.Conv2d(240, 1, kernel_size=1, stride=1, padding=0)
         self.headRec = HeatmapVAERecon(self.n_features_start, self.n_outRec, kernel_size=1, stride=1, padding=0)
 
     def reparameterize_logvar(self, mu, log_var):
@@ -287,7 +300,7 @@ class ResUnetVAE(nn.Module):
         downblocks = []
         for lbl, layer in self.encoder.items():
             if "bottle" in lbl:
-                mu, sigma, x = layer(x)
+                mu, sigma, x_bottle = layer(x)
                 sigma = self.act2(sigma)
             else:
                 x = layer(x)
@@ -300,20 +313,26 @@ class ResUnetVAE(nn.Module):
         z = self.pre_up(z)
         #x = nn.ReLU()(x) # TO REMOVE
         #x = x.view(-1, self.n_features_start * 4, 64, 64) #x = x.view(-1, self.n_features_start*8, 64, 64)
-        for layer, long_connect in zip(self.decoder.values(), reversed(downblocks)): #downblock store the long connection
-            z = layer(z, long_connect)
+
+        # SEGMENTATION PATH
+        x_seg = x_bottle
+        for layer, long_connect in zip(self.decoder_segm.values(), reversed(downblocks)):
+            x_seg = layer(x_seg, long_connect)
+        segm_out = self.head(x_seg)
+
+        # CONCAT TO GET RECONSTRUCTION TARGET
+        x_rec = x_bottle
+        for layer, long_connect in zip(self.decoder_conc.values(), reversed(downblocks)): #downblock store the long connection
+            x_rec = layer(x_rec, long_connect)
+        conc_out = self.headConc(x_rec)
+
+        # DECODE FROM LATENT SPACE TO RECONSTRUCT
+        for lbl, layer in self.decoder_rec.items(): #downblock store the long connection
+            z = layer(z)
         recon_out = self.headRec(z)
 
-        #for layer, long_connect in zip(self.decoder_segm.values(), reversed(downblocks)): #downblock store the long connection
-        #    x = layer(x, long_connect)
-        #segm_out = self.head(x)
-
-        for lbl, layer in self.decoder_segm.items():
-            x = layer(x)
-        segm_out = self.head(x)
-
         #return mu, sigma, segm_out, recon_out
-        return gray_rgb, mu, sigma, segm_out, recon_out
+        return conc_out, mu, sigma, segm_out, recon_out
 
     def init_kaiming_normal(self, mode='fan_in'):
         print('Initializing conv2d weights with Kaiming He normal')
