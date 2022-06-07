@@ -44,7 +44,7 @@ def train(ae=None):
                                                            num_workers=num_workers, shuffle_dataset=True,
                                                            random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_noLongConn.h5'
+    model_name = 'hydra_3_path.h5'
     resume = False
 
     if resume:
@@ -105,16 +105,17 @@ def train(ae=None):
 
                 y = target.to(device)
                 x = image.to(device)
-                gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                #gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                mu, sigma, segm, conc_out, (mu_p, sigma_p) = model(x)
                 #mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                 segm_loss = criterion(segm, y)
                 #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
+                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
 
                 #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 #KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
-                scale = 10
+                scale = 100
                 kld_factor = 0.6
                 KLD = KL_loss_forVAE(mu, sigma).mean()
                 loss = recon_loss + kld_factor*KLD + scale*segm_loss
@@ -134,16 +135,16 @@ def train(ae=None):
 
                         y = target.to(device)
                         x = image.to(device)
-                        gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                        #mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        # gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        mu, sigma, segm, conc_out, (mu_p, sigma_p) = model(x)
+                        # mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                         segm_loss = criterion(segm, y)
-                        #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, gray_RGB)
+                        # recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
+                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
 
                         # KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                         # KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
-                        scale = 10
                         KLD = KL_loss_forVAE(mu, sigma).mean()
                         loss = recon_loss + kld_factor * KLD + scale * segm_loss
 
