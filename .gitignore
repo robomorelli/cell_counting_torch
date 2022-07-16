@@ -3,8 +3,10 @@
 *.hdf5
 *.pdf
 *.tar
+*.png
 DATASET_fluo/*
 DATASET/*
+notebooks/model_results_torch/*
 *.zip
 ATLAS/*
 __pycache__/*
