@@ -233,7 +233,7 @@ class ResUnetVAE(nn.Module):
 
         #self.pre_up = Dec1(64, 128 * 64 * 64) # switch to (64, 128*64*64)>>>upconv_block:UpResidualBlock(n_in=8 * n_features_start, n_out=4 * n_features_start)
         #self.pre_up = Dec1(zDim, 64 * 64 * 64)
-        self.pre_up = nn.Conv2d(1, 8 * n_features_start, 1, 1, padding=0)
+        self.pre_up  = nn.Conv2d(1, 8 * n_features_start, 1, 1, padding=0)
         self.rebase_up = nn.ConvTranspose2d(n_features_start, 1, kernel_size=2, stride=2, padding=0)
 
 
@@ -302,7 +302,7 @@ class ResUnetVAE(nn.Module):
         downblocks = []
         for lbl, layer in self.encoder.items():
             if "bottle" in lbl:
-                mu, sigma, x_seg = layer(x)
+                mu, sigma, x_bottle = layer(x)
                 sigma = self.act2(sigma)
             else:
                 x = layer(x)
@@ -318,6 +318,8 @@ class ResUnetVAE(nn.Module):
         #x = nn.ReLU()(x) # TO REMOVE
         #x = x.view(-1, self.n_features_start * 4, 64, 64) #x = x.view(-1, self.n_features_start*8, 64, 64)
 
+        x_seg = x_bottle
+        x_conc = x_bottle
         # PATH FOR SEGMENTATION
         for layer, long_connect in zip(self.decoder_segm.values(), reversed(downblocks)):
             x_seg = layer(x_seg, long_connect)
@@ -327,8 +329,7 @@ class ResUnetVAE(nn.Module):
         #for layer, long_connect in zip(self.decoder_conc.values(), reversed(downblocks)):
         #    x_conc = layer(x_conc, long_connect)
         #conc_out = self.headConc(x_conc)
-
-        #conc_out = self.rebase_up(recon_base)
+        conc_out = self.rebase_up(recon_base)
         #conc_out = self.headConc(x_conc)
 
         # PATH FOR RECONSTRUCTION
@@ -337,7 +338,7 @@ class ResUnetVAE(nn.Module):
         recon_out = self.headRec(z)
 
         #return mu, sigma, segm_out, recon_out
-        return mu, sigma, segm_out, recon_out
+        return mu, sigma, segm_out, conc_out, recon_out
 
     def init_kaiming_normal(self, mode='fan_in'):
         print('Initializing conv2d weights with Kaiming He normal')

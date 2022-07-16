@@ -2,7 +2,7 @@ import random as rn
 import numpy as np
 from model.resunet import *
 from model.utils import EarlyStopping, WeightedLoss, load_data_train_eval, loss_VAE, \
-    KL_loss_forVAE, gaussian_loss, WeightedNLLLoss
+    KL_loss_forVAE, gaussian_loss, WeightedNLLLoss, loss_VAE_rec
 from dataset_loader.image_loader import *
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -22,7 +22,7 @@ from config import *
 np.random.seed(40)
 # The below is necessary for starting core Python generated random numbers
 # in a well-defined state.
-rn.seed(333)
+rn.seed(33323)
 
 def train(ae=None):
     cuda = torch.cuda.is_available()
@@ -36,15 +36,15 @@ def train(ae=None):
 
     num_workers = 48
     bs = 16
+
     if ae == 'ae':
         n_out=3
 
     train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,images_path=AugCropImages
-                                                           , masks_path=AugCropMasks, grayscale = False,
-                                                           num_workers=num_workers, shuffle_dataset=True,
-                                                           random_seed=42, ngpus=ngpus, ae=ae)
+                                    , masks_path=AugCropMasks, grayscale = False, num_workers=num_workers,
+                                    shuffle_dataset=True, random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_noLongConn_Concat.h5'
+    model_name = 'hydra3path3.h5'
     resume = False
 
     if resume:
@@ -74,7 +74,7 @@ def train(ae=None):
             model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=1,
                                       pretrained=False, resume=model_name, progress=True, device=device).to(device))
     else:
-        model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=1,
+        model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=3,
                                              pretrained=False, resume=model_name, progress=True, device=device).to(device))
 
     #Train Loop####
@@ -87,14 +87,14 @@ def train(ae=None):
     lr = 0.003
     epochs = 200
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr, threshold=0.0001,
-                                              threshold_mode='rel', cooldown=0, min_lr=9e-8, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr,
+                                                threshold=0.0001,threshold_mode='rel', cooldown=0,
+                                                           min_lr=9e-8, verbose=True)
     early_stopping = EarlyStopping(patience=patience)
 
     loss_type='weighted'
     if loss_type=='weighted':
         criterion = WeightedLoss(1, 1.5)
-
     #torch.autograd.set_detect_anomaly(True)
     for epoch in range(epochs):
         model.train()
@@ -105,17 +105,17 @@ def train(ae=None):
 
                 y = target.to(device)
                 x = image.to(device)
-                conc_out, mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                mu, sigma, segm, (mu_p, sigma_p) = model(x)
                 #mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                 segm_loss = criterion(segm, y)
-                #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
+                recon_loss, au, ne, au_1ch, ne_1ch = loss_VAE_rec(mu_p, sigma_p, x)
+                #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
 
                 #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 #KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
                 scale = 100
-                kld_factor = 0.6
+                kld_factor = 0.8
                 KLD = KL_loss_forVAE(mu, sigma).mean()
                 loss = recon_loss + kld_factor*KLD + scale*segm_loss
 
@@ -134,16 +134,18 @@ def train(ae=None):
 
                         y = target.to(device)
                         x = image.to(device)
-                        conc_out, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                        #mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        #mu, sigma, segm, conc_out, (mu_p, sigma_p) = model(x)
+                        mu, sigma, segm, (mu_p, sigma_p) = model(x)
+                        # mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                         segm_loss = criterion(segm, y)
-                        #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
+                        recon_loss, au, ne, au_1ch, ne_1ch = loss_VAE_rec(mu_p, sigma_p, x)
+                        #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
 
                         # KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                         # KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
                         scale = 100
+                        kld_factor = 0.6
                         KLD = KL_loss_forVAE(mu, sigma).mean()
                         loss = recon_loss + kld_factor * KLD + scale * segm_loss
 
@@ -159,7 +161,7 @@ def train(ae=None):
                         print('val_loss improved from {} to {}, saving model to {}' \
                               .format(val_loss, temp_val_loss, save_model_path))
                         path_posix = (save_model_path / model_name).as_posix()
-                        save_path = path_posix.split('.')[0] + '_{}'.format(epoch) + '.h5'
+                        save_path = path_posix + '.h5'
                         torch.save(model.state_dict(), save_path)
                         #torch.save(model.state_dict(), save_model_path / model_name)
                         val_loss = temp_val_loss

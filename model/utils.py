@@ -164,7 +164,6 @@ def WeightedLoss(zero_weight, one_weight):
 
     return weighted_binary_crossentropy
 
-
 #def VAE_loss(bce_loss, mu, logvar):
     #    """
     #    This function will add the reconstruction loss (BCELoss) and the
@@ -205,6 +204,19 @@ def loss_VAE(mu, sigma, x):
     #return torch.sum(nll_loss), au, ne
     return torch.mean(nll_loss), au, ne
 
+def loss_VAE_rec(mu, sigma, x):
+
+    au = 0.5*torch.log(2*np.pi*(sigma*sigma)) #aleatoric uncertainty
+    ne = (torch.square(mu - x))/(2*torch.square(sigma))#normalized error
+    nll_loss = au + ne
+    ## sum over channel to get the total sigma for each pixel
+    au_squared = torch.square(au)
+    au_1ch = torch.sqrt(torch.sum(au_squared, axis=1))
+    ne_squared = torch.square(ne)
+    ne_1ch = torch.sqrt(torch.sum(ne_squared, axis=1))
+
+    #return torch.sum(nll_loss), au, ne
+    return torch.mean(nll_loss), au, ne, au_1ch, ne_1ch
 
 def gaussian_loss(par1, par2, y):
     # Gaussian distributed variables
