@@ -35,7 +35,7 @@ def train(ae=None):
         ngpus=1
 
     num_workers = 0
-    bs = 16
+    bs = 8
     if ae == 'ae':
         n_out=3
 
@@ -44,7 +44,7 @@ def train(ae=None):
                                                            num_workers=num_workers, shuffle_dataset=True,
                                                            random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_3_path.h5'
+    model_name = '2path_2head.h5'
     resume = False
 
     if resume:
@@ -55,7 +55,7 @@ def train(ae=None):
                 checkpoint = torch.load(resume_path)
             else:
                 # Map model to be loaded to specified single gpu.
-                model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, n_out=1, n_outRec=1,
+                model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, n_out=1, n_outRec=3,
                                                      pretrained=False, progress=True)).to(device)
                 model.load_state_dict(torch.load(resume_path))
                 #checkpoint = torch.load(args.resume, map_location=loc)
@@ -71,10 +71,10 @@ def train(ae=None):
             #      .format(args.resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(resume_path))
-            model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=1,
+            model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=3, fully_conv=False,
                                       pretrained=False, resume=model_name, progress=True, device=device).to(device))
     else:
-        model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=1,
+        model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=3, fully_conv=False,
                                              pretrained=False, resume=model_name, progress=True, device=device).to(device))
 
     #Train Loop####
@@ -84,7 +84,7 @@ def train(ae=None):
     val_loss = 10 ** 16
     patience = 5
     patience_lr = 3
-    lr = 0.003
+    lr = 0.0001
     epochs = 200
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr, threshold=0.0001,
@@ -106,18 +106,18 @@ def train(ae=None):
                 y = target.to(device)
                 x = image.to(device)
                 #gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                mu, sigma, segm, conc_out, (mu_p, sigma_p) = model(x)
+                mu, sigma, segm, (mu_p, sigma_p) = model(x)
                 #mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                 segm_loss = criterion(segm, y)
                 #recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
+                recon_loss, au, ne, _ = loss_VAE(mu_p, sigma_p, x)
 
                 #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 #KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
-                scale = 100
+                scale = 10
                 kld_factor = 0.6
-                KLD = KL_loss_forVAE(mu, sigma).mean()
+                KLD = KL_loss_forVAE(mu, sigma)
                 loss = recon_loss + kld_factor*KLD + scale*segm_loss
 
                 loss.backward()
@@ -136,16 +136,16 @@ def train(ae=None):
                         y = target.to(device)
                         x = image.to(device)
                         # gray_RGB, mu, sigma, segm, (mu_p, sigma_p) = model(x)
-                        mu, sigma, segm, conc_out, (mu_p, sigma_p) = model(x)
+                        mu, sigma, segm, (mu_p, sigma_p) = model(x)
                         # mu, sigma, segm, (mu_p, sigma_p) = model(x)
 
                         segm_loss = criterion(segm, y)
                         # recon_loss, au, ne = loss_VAE(mu_p, sigma_p, x)
-                        recon_loss, au, ne = loss_VAE(mu_p, sigma_p, conc_out)
+                        recon_loss, au, ne, _ = loss_VAE(mu_p, sigma_p, x)
 
                         # KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                         # KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
-                        KLD = KL_loss_forVAE(mu, sigma).mean()
+                        KLD = KL_loss_forVAE(mu, sigma)
                         loss = recon_loss + kld_factor * KLD + scale * segm_loss
 
                         temp_val_loss += loss
@@ -160,7 +160,8 @@ def train(ae=None):
                         print('val_loss improved from {} to {}, saving model to {}' \
                               .format(val_loss, temp_val_loss, save_model_path))
                         path_posix = (save_model_path / model_name).as_posix()
-                        save_path = path_posix.split('.')[0] + '_{}'.format(epoch) + '.h5'
+                        #save_path = path_posix.split('.')[0] + '_{}'.format(epoch) + '.h5'
+                        save_path = path_posix
                         torch.save(model.state_dict(), save_path)
                         #torch.save(model.state_dict(), save_model_path / model_name)
                         val_loss = temp_val_loss

@@ -16,7 +16,7 @@ __all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'Up
 
 from fastai.vision.all import *
 from ._utils import *
-from model.utils import InverseSquareRootLinearUnit, Dec1, ConstrainedConv2d
+from model.utils import InverseSquareRootLinearUnit, Dec1, ConstrainedConv2d, LinConstr
 
 
 # Utils
@@ -188,26 +188,35 @@ class Bottleneck(nn.Module):
 
 class BottleneckVAE(nn.Module):
     def __init__(self, n_in, n_out, kernel_size=5, stride=1,
-                 padding=2, featureDim=128*64*64, zDim=64):
+                 padding=2, featureDim=128*64*64, zDim=64, fully_conv=False):
         super(BottleneckVAE, self).__init__()
 
+        self.fully_conv = fully_conv
         self.residual_block1 = ResidualBlock(n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
                                              is_conv=True)
         self.residual_block2 = ResidualBlock(n_out, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
                                              is_conv=False)
 
-        self.encFC1 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
-        self.encFC2 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
+        if self.fully_conv:
+            self.encFC1 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
+            self.encFC2 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
+        else:
+            self.encFC1 = LinConstr(featureDim, zDim)
+            self.encFC2 = LinConstr(featureDim, zDim)
 
-        #self.encFC1 = nn.Linear(featureDim, zDim)
-        #self.encFC2 = nn.Linear(featureDim, zDim)
+            #self.encFC1 = nn.Linear(featureDim, zDim)
+            #self.encFC2 = nn.Linear(featureDim, zDim)
+
         self.act_sigma = InverseSquareRootLinearUnit()
         self.featureDim = featureDim
 
     def forward(self, x):
-        x = self.residual_block2(self.residual_block1(x))
-        #x = x.view(-1, self.featureDim)
-        return self.encFC1(x), self.act_sigma(self.encFC2(x)), x
+        bottle = self.residual_block2(self.residual_block1(x))
+        if self.fully_conv != False:
+            return self.encFC1(x), self.act_sigma(self.encFC2(x)), bottle
+        else:
+            x = bottle.view(-1, self.featureDim)
+            return self.encFC1(x), self.act_sigma(self.encFC2(x)), bottle
 
 #class BottleneckVAE(nn.Module):
         #    def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):
@@ -307,15 +316,15 @@ class HeatmapVAE(nn.Module):
 class HeatmapVAERecon(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
         super(HeatmapVAERecon, self).__init__()
-        self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
-        self.ConstrainedConv2d_sigma = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
-        #self.conv2d_mu = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        #self.conv2d_sigma = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
+        #self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        #self.ConstrainedConv2d_sigma = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        self.Conv2d_mu = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
+        self.Conv2d_sigma = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
         self.act_mu = nn.Sigmoid()
         self.act_sigma = InverseSquareRootLinearUnit() #self.act_sigma = nn.Softplus()
 
     def forward(self, x):
-        return self.act_mu(self.ConstrainedConv2d_mu(x)), self.act_sigma(self.ConstrainedConv2d_sigma(x))
+        return self.act_mu(self.Conv2d_mu(x)), self.act_sigma(self.Conv2d_sigma(x))
 
 class Heatmap2d(nn.Module):
     def __init__(self, n_in, n_out=2, kernel_size=1, stride=1, padding=0, concat_dim=1):

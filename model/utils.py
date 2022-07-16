@@ -64,6 +64,27 @@ class Dec1(nn.Module):
         x = F.linear(x, self.weight.clamp(min=-1.0, max=1.0), self.bias)
         return x
 
+class LinConstr(nn.Module):
+    def __init__(self, in_features, out_features):
+        super(LinConstr, self).__init__()
+        self.weight = nn.Parameter(torch.randn(out_features, in_features))
+        self.bias = nn.Parameter(torch.randn(out_features))
+
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    def _max_norm(self, w):
+        norm = w.norm(2, dim=0, keepdim=True)
+        desired = torch.clamp(norm, 0, self._max_norm_val)
+        return w * (desired / (self._eps + norm))
+
+    def forward(self, x):
+        x = F.linear(x, self.weight.clamp(min=-1.0, max=1.0), self.bias)
+        return x
+
 class ConstrainedDec(nn.Linear):
     def forward(self, x):
         x = F.linear(x, self.weight.clamp(min=-1.0, max=1.0), self.bias)
@@ -201,9 +222,9 @@ def loss_VAE(mu, sigma, x):
     au = 0.5*torch.log(2*np.pi*(sigma*sigma)) #aleatoric uncertainty
     ne = (torch.square(mu - x))/(2*torch.square(sigma))#normalized error
     nll_loss = au + ne
-
-    #return torch.sum(nll_loss), au, ne
-    return torch.mean(nll_loss), au, ne
+    sigma_mean = torch.mean(sigma, axis=1)
+    #return torch.mean(torch.sum(nll_loss, dim=[-1.-2])), au, ne
+    return torch.mean(nll_loss), torch.mean(au, axis=1), torch.mean(ne, axis=1), sigma_mean
 
 
 def gaussian_loss(par1, par2, y):
@@ -214,7 +235,7 @@ def gaussian_loss(par1, par2, y):
     single_NLL = torch.log(sigma) + 0.5*torch.square(norm_y)
     #nll_loss = torch.sum(single_NLL, axis=-1)
     nll_loss = torch.sum(single_NLL, axis=(-1,-2))
-    return torch.mean(nll_loss)
+    return torch.sum(nll_loss)
 
 def KL_loss_forVAE(mu, sigma):
     mu_prior = torch.tensor(0)
