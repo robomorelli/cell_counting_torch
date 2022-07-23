@@ -274,9 +274,7 @@ class ResUnetVAE(nn.Module):
             'upconv_block3NoConv': UpResidualBlockNoConv(2*n_features_start, n_features_start),
         })
 
-
         self.headSeg = HeatmapVAE(self.n_features_start, self.n_out, kernel_size=1, stride=1, padding=0)
-        #self.headConc = HeatmapVAE(n_features_start, self.n_out, kernel_size=1, stride=1, padding=0)
         self.headRec = HeatmapVAERecon(self.n_features_start, self.n_outRec, kernel_size=1, stride=1, padding=0)
 
     def reparameterize_logvar(self, mu, log_var):
@@ -324,14 +322,6 @@ class ResUnetVAE(nn.Module):
         for layer, long_connect in zip(self.decoder_segm.values(), reversed(downblocks)):
             x_seg = layer(x_seg, long_connect)
         segm_out = self.headSeg(x_seg)
-
-        # PATH FOR CONCATENATION
-        #for layer, long_connect in zip(self.decoder_conc.values(), reversed(downblocks)):
-        #    x_conc = layer(x_conc, long_connect)
-        #conc_out = self.headConc(x_conc)
-
-        #conc_out = self.rebase_up(recon_base)
-        #conc_out = self.headConc(x_conc)
 
         # PATH FOR RECONSTRUCTION
         for lbl, layer in self.decoder_rec.items(): #downblock store the long connection

@@ -44,7 +44,7 @@ def train(ae=None):
                                     , masks_path=AugCropMasks, grayscale = False, num_workers=num_workers,
                                     shuffle_dataset=True, random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = '2path_2head.h5'
+    model_name = 'hydra'
     resume = False
 
     if resume:
@@ -110,12 +110,10 @@ def train(ae=None):
                 segm_loss = criterion(segm, y)
                 recon_loss, au, ne, au_1ch, ne_1ch = loss_VAE_rec(mu_p, sigma_p, x)
 
-                #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-                #KLD = -0.5 * torch.sum(1 + torch.log(sigma*sigma) - mu.pow(2) - sigma*sigma)
                 scale = 10
                 kld_factor = 0.6
                 KLD = KL_loss_forVAE(mu, sigma)
-                loss = recon_loss + kld_factor*KLD + scale*segm_loss
+                loss = scale * recon_loss + kld_factor*KLD + scale*segm_loss
 
                 loss.backward()
                 optimizer.step()
@@ -136,10 +134,9 @@ def train(ae=None):
                         mu, sigma, segm, (mu_p, sigma_p) = model(x)
                         segm_loss = criterion(segm, y)
                         recon_loss, au, ne, au_1ch, ne_1ch = loss_VAE_rec(mu_p, sigma_p, x)
-                        scale = 100
-                        kld_factor = 0.6
-                        KLD = KL_loss_forVAE(mu, sigma).mean()
-                        loss = recon_loss + kld_factor * KLD + scale * segm_loss
+
+                        KLD = KL_loss_forVAE(mu, sigma)
+                        loss = scale * recon_loss + kld_factor * KLD + scale * segm_loss
 
                         temp_val_loss += loss
                         if i % 10 == 0:

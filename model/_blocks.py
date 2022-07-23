@@ -188,7 +188,7 @@ class Bottleneck(nn.Module):
 
 class BottleneckVAE(nn.Module):
     def __init__(self, n_in, n_out, kernel_size=5, stride=1,
-                 padding=2, featureDim=128*64*64, zDim=64, fully_conv=False):
+                 padding=2, featureDim=128*64*64, zDim=64, fully_conv=True):
         super(BottleneckVAE, self).__init__()
 
         self.fully_conv = fully_conv
@@ -213,10 +213,10 @@ class BottleneckVAE(nn.Module):
     def forward(self, x):
         bottle = self.residual_block2(self.residual_block1(x))
         if self.fully_conv != False:
-            return self.encFC1(x), self.act_sigma(self.encFC2(x)), bottle
+            return self.encFC1(bottle), self.act_sigma(self.encFC2(bottle)), bottle
         else:
             x = bottle.view(-1, self.featureDim)
-            return self.encFC1(x), self.act_sigma(self.encFC2(x)), bottle
+            return self.encFC1(bottle), self.act_sigma(self.encFC2(bottle)), bottle
 
 #class BottleneckVAE(nn.Module):
         #    def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):

@@ -258,5 +258,5 @@ def KL_loss_forVAE(mu, sigma):
     kl_loss += torch.log(torch.div(sigma_prior, sigma)) -1
     #kl_loss = torch.sum(kl_loss, axis=(-1,-2))
     ##return 0.5 * torch.sum(kl_loss)
-    return 0.5 * torch.mean(kl_loss)
+    return 0.5 * torch.sum(kl_loss)
 
