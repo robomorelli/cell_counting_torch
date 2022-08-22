@@ -234,16 +234,167 @@ def data_aug(image ,mask, image_id, nlabels_tar, minimum, maximum):
 
 #         return image, mask
 
+def data_aug_red(image, mask, image_id, nlabels_tar, minimum, maximum):
 
-def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_start_new_images,
-                           split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix,  unique_split, no_artifact_aug, ae=False):
+    gaussian = random.random()
+    generic_transf = random.random()
+    elastic = random.random()
+    distorted = random.random()
+
+    if generic_transf < 0.65:
+
+        augmentation = lookup_tiff_augR(p=1)
+        data = {"image": image}
+        augmented = augmentation(**data)
+        image = augmented["image"]
+
+        augmentation = shifterR(p=0.8)
+        data = {"image": image, "mask": mask}
+        augmented = augmentation(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        if gaussian <= 0.30:
+            gaussian_blur = GaussianR(p=1, blur_limit=15)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+            mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+    if elastic < 0.95:
+
+        alfa = random.choice([50, 60, 60, 65, 65, 65, 70])
+        alfa_affine = random.choice([20, 20, 35, 40, 40])
+        sigma = random.choice([10, 25, 15, 20, 20, 25])
+        #         alfa = random.choice([350, 400])
+        #         alfa_affine = random.choice([100, 150])
+        #         sigma = random.choice([50, 75])
+        elastic = elastic_defR(alfa, alfa_affine, sigma, p=1)
+        data = {"image": image, "mask": mask}
+        augmented = elastic(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        if gaussian <= 0.25:
+            gaussian_blur = GaussianR(p=1, blur_limit=13)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+            mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+    if distorted < 1:
+
+        augmentation = shifterR(p=1)
+        data = {"image": image, "mask": mask}
+        augmented = augmentation(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        if gaussian <= 0.15:
+            gaussian_blur = GaussianR(p=1, blur_limit=15)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+
+def lookup_tiff_augR(p=0.5):
+    return Compose([
+
+        ToFloat(),
+
+        # LOOKUP TABLE
+        OneOf([
+            #         HueSaturationValue(hue_shift_limit=5, sat_shift_limit=5, val_shift_limit=5, p=1),
+            RandomBrightnessContrast(brightness_limit=0, contrast_limit=(-0.5, -0.3), p=0.2),
+            #         HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(-0.05,0.05), p=1),
+
+        ], p=p),
+
+        FromFloat(dtype='uint8', max_value=255.0),
+
+    ], p=p)
+
+
+def distortionR(p=0.5):
+    return Compose([
+
+        ToFloat(),
+
+        # LOOKUP TABLE
+        OneOf([
+
+            GridDistortion(num_steps=4, distort_limit=0.5, interpolation=1, border_mode=cv2.BORDER_CONSTANT, p=1)
+
+        ], p=p),
+
+        FromFloat(dtype='uint8', max_value=255.0),
+
+    ], p=p)
+
+
+def shifterR(p=.5):
+    return Compose([
+        ToFloat(),
+
+        # ROTATION
+        Rotate(limit=180, interpolation=1, border_mode=cv2.BORDER_CONSTANT,
+               always_apply=False, p=0.75),
+        #         #FLIP
+        OneOf([
+            VerticalFlip(p=0.6),
+            HorizontalFlip(p=0.6),
+        ], p=p),
+
+        FromFloat(dtype='uint8', max_value=255.0),
+
+    ], p=p)
+
+
+def elastic_defR(alpha, alpha_affine, sigma, p=.5):
+    return Compose([
+        ToFloat(),
+
+        ElasticTransform(alpha=alpha, sigma=sigma, alpha_affine=alpha_affine, interpolation=1,
+                         border_mode=cv2.BORDER_CONSTANT, always_apply=False,
+                         approximate=False, p=1),
+
+        FromFloat(dtype='uint8', max_value=255.0),
+
+    ], p=p)
+
+
+def GaussianR(p=.5, blur_limit=9):
+    return Compose([
+        ToFloat(),
+
+        OneOf([
+            Blur(blur_limit=blur_limit, p=1),
+        ], p=1),
+
+        FromFloat(dtype='uint8', max_value=255.0),
+
+    ], p=p)
+
+
+def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_new_images,
+                        split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix, unique_split,
+                        no_artifact_aug, ae=False):
 
     if no_artifact_aug:
         print('no artifact aug')
 
     if ae:
-        SaveAugImages = AugCropImagesAE
-
         tot = len(image_ids)
         for ax_index, image_id in enumerate(image_ids):
 
@@ -274,111 +425,119 @@ def make_data_augmentation(image_ids, images_path,  masks_path, split_num, id_st
 
         return
 
+    else:
+        # for ax_index, image_id in tqdm(enumerate(image_ids),total=len(image_ids)):
+        tot = len(image_ids)
+        for ax_index, image_id in enumerate(image_ids):
+            ID = int(image_id.split('.')[0])
 
-    if (no_artifact_aug) or (unique_split):
-        SaveAugImages = AugCropImagesBasic
-        SaveAugMasks = AugCropMasksBasic
+            image, mask = read_image_masks(image_id, images_path, masks_path)
 
-    # for ax_index, image_id in tqdm(enumerate(image_ids),total=len(image_ids)):
-    tot = len(image_ids)
-    for ax_index, image_id in enumerate(image_ids):
-        ID = int(image_id.split('.')[0])
+            minimum = mask[:, :, 1:2].min()
+            maximum = mask[:, :, 1:2].max()
+            labels_tar, nlabels_tar = ndimage.label(np.squeeze(mask[:, :, 0:1]))
 
-        image, mask = read_image_masks(image_id, images_path,  masks_path)
-
-        minimum = mask[:,:,1:2].min()
-        maximum = mask[:,:,1:2].max()
-        labels_tar, nlabels_tar = ndimage.label(np.squeeze(mask[:,:,0:1]))
-
-        if unique_split == 0:
-            if ID > id_start_new_images:
-                split_num_im = split_num_new_images
+            if unique_split == 0:
+                if ID > id_start_new_images:
+                    split_num_im = split_num_new_images
+                else:
+                    split_num_im = split_num
             else:
-                split_num_im = split_num
-        else:
-            split_num = unique_split
+                split_num = unique_split
 
-        print('image {} on {} params: {}-{}'.format(ax_index, tot, ID, split_num_im))
+            print('image {} on {} params: {}-{}'.format(ax_index, tot, ID, split_num_im))
 
-        if (ID in id_edges) & (not(no_artifact_aug)):
-            print(ID, ix)
-            for i in range(80):
+            if (ID in id_edges) & (not (no_artifact_aug)):
+                print(ID, ix)
+                for i in range(80):
+                    image, mask = read_image_masks(image_id, images_path, masks_path)
 
-                image, mask = read_image_masks(image_id, images_path,  masks_path)
+                    augmentation = edges_aug(p=1)
+                    data = {"image": image}
+                    augmented = augmentation(**data)
+                    new_image = augmented["image"]
 
-                augmentation = edges_aug(p = 1)
-                data = {"image": image}
-                augmented = augmentation(**data)
-                new_image = augmented["image"]
+                    augmentation = shifter(p=0.8)
+                    data = {"image": new_image, "mask": mask}
+                    augmented = augmentation(**data)
+                    new_image, new_mask = augmented["image"], augmented["mask"]
 
-                augmentation = shifter(p = 0.8)
-                data = {"image": new_image, "mask": mask}
-                augmented = augmentation(**data)
-                new_image, new_mask = augmented["image"], augmented["mask"]
+                    new_mask[:, :, 1:2] = np.clip(new_mask[:, :, 1:2], minimum, maximum)
 
-                new_mask[:,:,1:2] =np.clip(new_mask[:,:,1:2], minimum, maximum)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    ix += 1
 
-                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
-                ix +=1
+                    plt.imsave(fname=aug_img_dir, arr=new_image)
+                    plt.imsave(fname=aug_mask_dir, arr=new_mask)
 
-                plt.imsave(fname=aug_img_dir, arr = new_image)
-                plt.imsave(fname=aug_mask_dir,arr = new_mask)
+                for i in range(35):
+                    image, mask = read_image_masks(image_id, images_path, masks_path)
 
-            for i in range(35):
+                    alfa = random.choice([30, 30, 30, 40])
+                    alfa_affine = random.choice([20, 20, 20, 30, 40, 40])
+                    sigma = random.choice([20, 20, 20, 20, 30, 30, 15])
 
-                image, mask = read_image_masks(image_id, images_path,  masks_path)
+                    elastic = elastic_def(alfa, alfa_affine, sigma, p=1)
+                    data = {"image": image, "mask": mask}
+                    augmented = elastic(**data)
+                    new_image, new_mask = augmented["image"], augmented["mask"]
 
-                alfa = random.choice([30,30,30, 40])
-                alfa_affine = random.choice([20,20,20,30, 40, 40])
-                sigma = random.choice([20, 20, 20, 20, 30, 30, 15])
+                    new_mask[:, :, 1:2] = np.clip(new_mask[:, :, 1:2], minimum, maximum)
 
-                elastic = elastic_def(alfa, alfa_affine, sigma, p=1)
-                data = {"image": image, "mask": mask}
-                augmented = elastic(**data)
-                new_image, new_mask = augmented["image"], augmented["mask"]
+                    # '{}.tiff'.format(ix)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    ix += 1
 
-                new_mask[:,:,1:2] =np.clip(new_mask[:,:,1:2], minimum, maximum)
+                    plt.imsave(fname=aug_img_dir, arr=new_image)
+                    plt.imsave(fname=aug_mask_dir, arr=new_mask)
 
-                #'{}.tiff'.format(ix)
-                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
-                ix +=1
+                for blur in range(1, 39, 3):
+                    image, mask = read_image_masks(image_id, images_path, masks_path)
 
-                plt.imsave(fname=aug_img_dir, arr = new_image)
-                plt.imsave(fname=aug_mask_dir,arr = new_mask)
+                    blur_limit = blur
+                    gaussian_blur = Gaussian(p=1, blur_limit=blur_limit)
+                    data = {"image": image}
+                    augmented = gaussian_blur(**data)
+                    new_image = augmented["image"]
 
-            for blur in range(1 , 39, 3):
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    ix += 1
 
-                image, mask = read_image_masks(image_id, images_path,  masks_path)
+                    plt.imsave(fname=aug_img_dir, arr=new_image)
+                    plt.imsave(fname=aug_mask_dir, arr=mask)
 
-                blur_limit = blur
-                gaussian_blur = Gaussian(p = 1, blur_limit= blur_limit)
-                data = {"image": image}
-                augmented = gaussian_blur(**data)
-                new_image = augmented["image"]
+            else:
 
-                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
-                ix +=1
+                for i in range(split_num_im):
+                    new_image, new_mask = data_aug(image, mask, image_id, nlabels_tar, minimum, maximum)
 
-                plt.imsave(fname=aug_img_dir, arr = new_image)
-                plt.imsave(fname=aug_mask_dir,arr = mask)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    ix += 1
 
-        else:
+                    plt.imsave(fname=aug_img_dir, arr=new_image)
+                    plt.imsave(fname=aug_mask_dir, arr=new_mask)
 
-            for i in range(split_num_im):
+        return
 
-                new_image, new_mask = data_aug(image, mask, image_id, nlabels_tar, minimum, maximum)
 
-                aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
-                ix += 1
 
-                plt.imsave(fname=aug_img_dir, arr = new_image)
-                plt.imsave(fname=aug_mask_dir, arr = new_mask)
 
-    return
+#class RedAugumenter(object):
+#    def __init__(self,
+#                 treshold: float = 0.005,
+#                 imgType: str = "cv2",
+#                 lowerValue: int = 5,
+#                 upperValue: int = 250,
+#                 noiseType: str = "SnP"):
+#        self.treshold = treshold
+#        self.imgType = imgType
+#        self.lowerValue = lowerValue  # 255 would be too high
+#        self.upperValue = upperValue  # 0 would be too low
+
 
 
 class SaltAndPepperNoise(object):
@@ -435,4 +594,5 @@ class SaltAndPepperNoise(object):
         elif self.imgType == "PIL":
             # return as PIL image for torchvision transforms compliance
             return PIL.Image.fromarray(img)
+
 

@@ -11,13 +11,11 @@
 #  #See the License for the specific language governing permissions and
 #  #limitations under the License.
 __all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'UpResidualBlock', 'Bottleneck',
-           'Heatmap', 'Heatmap2d', 'UpResidualBlockVAE_old', 'BottleneckVAE' , 'HeatmapVAE', 'HeatmapVAERecon',
-           'UpResidualBlockNoConcat', 'UpResidualBlockNoConv']
+           'Heatmap', 'Heatmap2d', 'HeatmapAE']
 
 from fastai.vision.all import *
 from ._utils import *
 from model.utils import InverseSquareRootLinearUnit, Dec1, ConstrainedConv2d, LinConstr
-
 
 # Utils
 def _get_ltype(layer):
@@ -43,21 +41,6 @@ class Concatenate(nn.Module):
     def forward(self, x):
         return self.cat(x)
 
-
-# class ConvBlock(nn.Module):
-#     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1):
-#         super(ConvBlock, self).__init__()
-#         self.block = nn.Sequential(
-#             nn.BatchNorm2d(n_in, momentum=0.01, eps=0.001),
-#             nn.ELU(),
-#             nn.Conv2d(n_in, n_out, kernel_size, stride, padding),
-#             nn.BatchNorm2d(n_out, momentum=0.01, eps=0.001),
-#             nn.ELU(),
-#             nn.Conv2d(n_out, n_out, kernel_size, stride, padding),
-#         )
-#
-#     def forward(self, x):
-#         return self.block(x)
 
 # TODO: commented parts should allow blocks numbering. Find a way to do it automatically and propagate to different blocks
 class ConvBlock(nn.Module):
@@ -111,33 +94,6 @@ class IdentityPath(nn.Module):
         return getattr(self, self.layer_name)(x)
 
 
-# class ConvResNetBlock(nn.Module):
-#     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1):
-#         super(ConvResNetBlock, self).__init__()
-#         self.conv_block = ConvBlock(
-#             n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-#         self.short_connect = nn.Conv2d(n_in, n_out, kernel_size=1, padding=0)
-#         self.resnet_block = Add()
-#
-#     def forward(self, x):
-#         conv_block = self.conv_block(x)
-#         short_connect = self.short_connect(x)
-#         resnet_block = self.resnet_block(conv_block, short_connect)
-#         return resnet_block
-#
-#
-# class ResNetBlock(nn.Module):
-#     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1):
-#         super(ResNetBlock, self).__init__()
-#         self.conv_block = ConvBlock(
-#             n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-#         self.resnet_block = Add()
-#
-#     def forward(self, x1, x2):
-#         conv_block = self.conv_block(x1)
-#         resnet_block = self.resnet_block(conv_block, x2)
-#         return resnet_block
-
 
 class ResidualBlock(nn.Module):
     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, is_conv=True):
@@ -154,23 +110,6 @@ class ResidualBlock(nn.Module):
         return self.add(conv_path, short_connect)
 
 
-# class UpResNetBlock(nn.Module):
-#     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
-#         super(UpResNetBlock, self).__init__()
-#         self.up_conv = nn.ConvTranspose2d(
-#             n_in, n_out, kernel_size=2, stride=2, padding=0)
-#         self.concat = Concatenate(dim=concat_dim)
-#         self.conv_block = ConvBlock(
-#             n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-#         self.up_resnet_block = Add()
-#
-#     def forward(self, x, long_connect):
-#         short_connect = self.up_conv(x)
-#         concat = self.concat([short_connect, long_connect])
-#         up_resnet_block = self.up_resnet_block(
-#             self.conv_block(concat), short_connect)
-#         return up_resnet_block
-
 
 class Bottleneck(nn.Module):
     def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):
@@ -183,51 +122,6 @@ class Bottleneck(nn.Module):
 
     def forward(self, x):
         return self.residual_block2(self.residual_block1(x))
-
-
-
-class BottleneckVAE(nn.Module):
-    def __init__(self, n_in, n_out, kernel_size=5, stride=1,
-                 padding=2, featureDim=128*64*64, zDim=64, fully_conv=True):
-        super(BottleneckVAE, self).__init__()
-
-        self.fully_conv = fully_conv
-        self.residual_block1 = ResidualBlock(n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
-                                             is_conv=True)
-        self.residual_block2 = ResidualBlock(n_out, n_out, kernel_size=kernel_size, stride=stride, padding=padding,
-                                             is_conv=False)
-
-        if self.fully_conv:
-            self.encFC1 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
-            self.encFC2 = ConstrainedConv2d(n_out, 1, 1, stride, padding=0)
-        else:
-            self.encFC1 = LinConstr(featureDim, zDim)
-            self.encFC2 = LinConstr(featureDim, zDim)
-
-            #self.encFC1 = nn.Linear(featureDim, zDim)
-            #self.encFC2 = nn.Linear(featureDim, zDim)
-
-        self.act_sigma = InverseSquareRootLinearUnit()
-        self.featureDim = featureDim
-
-    def forward(self, x):
-        bottle = self.residual_block2(self.residual_block1(x))
-        if self.fully_conv != False:
-            return self.encFC1(bottle), self.act_sigma(self.encFC2(bottle)), bottle
-        else:
-            x = bottle.view(-1, self.featureDim)
-            return self.encFC1(bottle), self.act_sigma(self.encFC2(bottle)), bottle
-
-#class BottleneckVAE(nn.Module):
-        #    def __init__(self, n_in, n_out, kernel_size=5, stride=1, padding=2):
-        #        super(BottleneckVAE, self).__init__()
-        #
-        #        self.conv2d_mu = nn.Conv2d(n_in, 1, 1, stride, padding=0)
-    #        self.conv2d_sigma = nn.Conv2d(n_in, 1, 1, stride, padding=0)
-    #
-        #    def forward(self, x):
-#        return self.conv2d_mu(x), nn.ReLU()((self.conv2d_sigma(x)))
-        #return self.conv2d_mu(self.residual_block2(self.residual_block1(x))), self.conv2d_sigma(self.residual_block2(self.residual_block1(x)))
 
 
 class UpResidualBlock(nn.Module):
@@ -246,53 +140,6 @@ class UpResidualBlock(nn.Module):
         concat = self.id_path.concat([short_connect, long_connect])
         return self.add(self.conv_path(concat), short_connect)
 
-class UpResidualBlockNoConv(nn.Module):
-    def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
-        super(UpResidualBlockNoConv, self).__init__()
-        self.id_path = nn.ModuleDict({
-            "up_conv": nn.ConvTranspose2d(n_in, n_out, kernel_size=2, stride=2, padding=0),
-            "concat": Concatenate(dim=concat_dim)
-        })
-        #self.conv_path = ConvBlock(
-        #    n_in, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-        #self.add = Add()
-
-    def forward(self, x, long_connect):
-        short_connect = self.id_path.up_conv(x)
-        concat = self.id_path.concat([short_connect, long_connect])
-        return concat
-
-class UpResidualBlockNoConcat(nn.Module):
-    def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
-        super(UpResidualBlockNoConcat, self).__init__()
-        self.id_path = nn.ModuleDict({
-            "up_conv": nn.ConvTranspose2d(n_in, n_out, kernel_size=2, stride=2, padding=0),
-           # "concat": Concatenate(dim=concat_dim)
-        })
-        self.conv_path = ConvBlock(
-            n_in//2, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-        self.add = Add()
-
-    def forward(self, x):
-        short_connect = self.id_path.up_conv(x)
-        #concat = self.id_path.concat([short_connect, long_connect])
-        return self.add(self.conv_path(short_connect), short_connect)
-
-class UpResidualBlockVAE_old(nn.Module):
-    def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, concat_dim=1):
-        super(UpResidualBlockVAE, self).__init__()
-        self.id_path = nn.ModuleDict({
-            "up_conv": nn.ConvTranspose2d(n_in, n_out, kernel_size=2, stride=2, padding=0),
-            "concat": Concatenate(dim=concat_dim)
-        })
-        self.conv_path = ConvBlock(
-            n_in*2, n_out, kernel_size=kernel_size, stride=stride, padding=padding)
-        self.add = Add()
-
-    def forward(self, x, long_connect):
-        short_connect = self.id_path.up_conv(x)
-        concat = self.id_path.concat([short_connect, long_connect])
-        return self.add(self.conv_path(concat), short_connect)
 
 class Heatmap(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
@@ -303,28 +150,17 @@ class Heatmap(nn.Module):
     def forward(self, x):
         return self.act(self.conv2d(x))
 
-class HeatmapVAE(nn.Module):
+class HeatmapAE(nn.Module):
     def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
-        super(HeatmapVAE, self).__init__()
-        self.conv2d = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        #self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
+        super(HeatmapAE, self).__init__()
+        self.conv2d_binary = nn.Conv2d(n_in, 1, kernel_size, stride, padding)
+        self.conv2d = nn.Conv2d(1, n_out, kernel_size, stride, padding)
         self.act = nn.Sigmoid()
 
     def forward(self, x):
+        x = self.act(self.conv2d_binary(x))
         return self.act(self.conv2d(x))
 
-class HeatmapVAERecon(nn.Module):
-    def __init__(self, n_in, n_out=1, kernel_size=1, stride=1, padding=0):
-        super(HeatmapVAERecon, self).__init__()
-        #self.ConstrainedConv2d_mu = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
-        #self.ConstrainedConv2d_sigma = ConstrainedConv2d(n_in, n_out, kernel_size, stride, padding)
-        self.Conv2d_mu = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        self.Conv2d_sigma = nn.Conv2d(n_in, n_out, kernel_size, stride, padding)
-        self.act_mu = nn.Sigmoid()
-        self.act_sigma = InverseSquareRootLinearUnit() #self.act_sigma = nn.Softplus()
-
-    def forward(self, x):
-        return self.act_mu(self.Conv2d_mu(x)), self.act_sigma(self.Conv2d_sigma(x))
 
 class Heatmap2d(nn.Module):
     def __init__(self, n_in, n_out=2, kernel_size=1, stride=1, padding=0, concat_dim=1):

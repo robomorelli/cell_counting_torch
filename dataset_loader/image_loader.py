@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 
 class CellsLoader(Dataset):
-    def __init__(self, images_path, masks_path, val_split=0.3, grayscale = False,
-                 transform=None, ae=None, test=False, priority_list=[]):
+    def __init__(self, images_path=None, masks_path=None, val_split=0.3, grayscale=False,
+                 transform=None, ae=None, test=False, priority_list=[], unlabelled=False):
         self.imgs_path = images_path
         self.masks_path = masks_path
         self.val_split = val_split
@@ -16,22 +16,39 @@ class CellsLoader(Dataset):
         self.test = test
         self.priority_list = priority_list
         self.grayscale = grayscale
+        self.unlabelled = unlabelled
 
         #if self.grayscale:
         #    self.transform_gray = transform.transforms.append(T.Resize((1040,1400)))
 
-
-        if len(priority_list)==0:
+        if self.unlabelled:
             self.img_list = os.listdir(self.imgs_path)
-            self.mask_list = os.listdir(self.masks_path)
-        else:
+        elif len(priority_list)>0:
             self.img_list = priority_list
             self.mask_list = priority_list
+        else:
+            self.img_list = os.listdir(self.imgs_path)
+            self.mask_list = os.listdir(self.masks_path)
+
+        if self.test:
+            self.img_list.sort()
+            self.mask_list.sort()
 
     def __len__(self):
         return len(self.img_list)
     def __getitem__(self, idx):
-        if self.ae == 'ae' and not self.test:
+
+        if self.unlabelled:
+            img = cv2.imread(self.imgs_path + self.img_list[idx])
+            if self.grayscale:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            else:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            if self.transform is not None:
+                img = self.transform(img)
+            return img.float()
+
+        elif self.ae == 'ae' and not self.test:
             shift = np.random.randint(0,1,1)[0]
             if '_' in self.img_list[idx]:
                name =  self.img_list[idx].split('_')[0]

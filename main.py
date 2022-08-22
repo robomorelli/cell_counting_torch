@@ -12,68 +12,93 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 from time import sleep
 import torch
+import sys
+import argparse
+sys.path.append('..')
+from config import *
 
-np.random.seed(42)
+
+np.random.seed(40)
 # The below is necessary for starting core Python generated random numbers
 # in a well-defined state.
-rn.seed(123456)
+#rn.seed(33323)
+rn.seed(3334)
 
-def train(ae=None):
+def train(args):
     cuda = torch.cuda.is_available()
     device = torch.device("cuda" if cuda else "cpu")
     if cuda:
         print('added visible gpu')
-        ngpus = torch.cuda.device_count()
+        ndevices = torch.cuda.device_count()
 
     else:
-        ngpus=1
+        ndevices=1
 
     num_workers = 0
-    bs = 16
-    if ae == 'ae':
-        train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,
-                                                               num_workers=num_workers, shuffle_dataset=True,
-                                                               random_seed=42, ngpus=ngpus, ae=ae)
-        model = nn.DataParallel(c_resunetAE(arch='c-ResUnetAE', n_features_start=16, n_out=3,
-                                          pretrained=False, progress=True).to(device))
-
+    if args.ae:
+        n_out=3
+        args.loss_type='unweighted'
     else:
-        train_loader, validation_loader = load_data_train_eval(batch_size=bs, validation_split=0.3,
-                            num_workers=num_workers, shuffle_dataset=True, random_seed=42, ngpus=ngpus)
-        model = nn.DataParallel(c_resunet(arch='c-ResUnet', n_features_start = 16, n_out = 1,
-                                          pretrained = False, progress= True).to(device))
+        n_out=1
+
+    train_loader, validation_loader = load_data_train_eval(dataset=args.dataset,
+                                    batch_size=args.bs, validation_split=0.3,
+                                    grayscale = False, num_workers=num_workers,
+                                    shuffle_dataset=True, random_seed=42, ngpus=ndevices, ae=args.ae, few_shot=args.few_shot,
+                                    self_supervised=args.self_supervised)
+
+    if args.resume:
+        resume_path = args.save_model_path + args.model_name + '.h5'
+        if os.path.isfile(resume_path):
+            print("=> loading checkpoint '{}'".format(resume_path))
+            if device == 'cpu':
+                checkpoint = torch.load(resume_path)
+            else:
+                if args.from_ae_to_binary:
+                    model = load_ae_inference(resume_path=resume_path, device=device, n_features_start=16, n_out=n_out,
+                                       fine_tuning=args.fine_tuning, unfreezed_layers=args.unfreezed_layers)
+                else:
+                    model = load_model(resume_path=resume_path, device=device, n_features_start=16, n_out=n_out,
+                                       fine_tuning=args.fine_tuning, unfreezed_layers=args.unfreezed_layers)
+
+            if args.new_model_name:
+                args.model_name = args.new_model_name
+        else:
+            print("=> no checkpoint found at '{}'".format(resume_path))
+            model = nn.DataParallel(c_resunet(arch='c-ResUnet', n_features_start=16, n_out=n_out,
+                                                    pretrained=False, progress=True)).to(device)
+    else:
+        model = nn.DataParallel(c_resunet(arch='c-ResUnet', n_features_start=16, n_out=n_out,
+                                          pretrained=False, resume=args.model_name, progress=True,
+                                          device=device).to(device))
 
     #Train Loop####
     """
     Set the model to the training mode first and train
     """
     val_loss = 10 ** 16
-    patience = 5
-    lr = 0.003
-    epochs = 200
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience, threshold=0.0001,
-                                              threshold_mode='rel', cooldown=0, min_lr=9e-8, verbose=True)
-    early_stopping = EarlyStopping(patience=patience)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=args.patience_lr,
+                                                threshold=0.0001,threshold_mode='rel', cooldown=0,
+                                                           min_lr=9e-8, verbose=True)
+    early_stopping = EarlyStopping(patience=args.patience)
 
-    model_name = 'test_loss_resunet.h5'
-
-    if ae:
-        criterion = nn.BCELoss()
-    else:
+    if args.loss_type=='weighted':
         criterion = WeightedLoss(1, 1.5)
-
+    else:
+        criterion = nn.BCELoss()
     #torch.autograd.set_detect_anomaly(True)
-    for epoch in range(epochs):
+    for epoch in range(args.epochs):
         model.train()
         with tqdm(train_loader, unit="batch") as tepoch:
             for i, (image, target) in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {epoch}")
                 optimizer.zero_grad()
-                # .permute(0, 3, 1, 2).float()
-                x = model(image.to(device))
+
                 y = target.to(device)
-                loss = criterion(x, y)
+                x = image.to(device)
+                out = model(x)
+                loss = criterion(out, y)
                 loss.backward()
                 optimizer.step()
                 tepoch.set_postfix(loss=loss.item())
@@ -86,9 +111,11 @@ def train(ae=None):
                 with tqdm(validation_loader, unit="batch") as vepoch:
                     for i, (image, target) in enumerate(vepoch):
                         optimizer.zero_grad()
-                        x = model(image.to(device))
+
                         y = target.to(device)
-                        loss = criterion(x, y)
+                        x = image.to(device)
+                        out = model(x)
+                        loss = criterion(out, y)
                         temp_val_loss += loss
                         if i % 10 == 0:
                             print("VALIDATION Loss: {} batch {} on total of {}".format(loss.item(),
@@ -99,8 +126,11 @@ def train(ae=None):
                     scheduler.step(temp_val_loss)
                     if temp_val_loss < val_loss:
                         print('val_loss improved from {} to {}, saving model to {}' \
-                              .format(val_loss, temp_val_loss, save_model_path))
-                        torch.save(model.state_dict(), save_model_path / model_name)
+                              .format(val_loss, temp_val_loss, args.save_model_path))
+                        path_posix = args.save_model_path + args.model_name
+                        save_path = path_posix + '.h5'
+                        torch.save(model.state_dict(), save_path)
+                        #torch.save(model.state_dict(), save_model_path / model_name)
                         val_loss = temp_val_loss
                     early_stopping(temp_val_loss)
                     if early_stopping.early_stop:
@@ -110,9 +140,43 @@ if __name__ == "__main__":
     ###############################################
     # TO DO: add parser for parse command line args
     ###############################################
-    save_model_path = Path('./model_results_torch')
-    if not (save_model_path.exists()):
+    parser = argparse.ArgumentParser(description='Define parameters for test.')
+    parser.add_argument('--save_model_path', nargs="?", default=ModelResults,
+                        help='the folder including the masks to crop')
+    parser.add_argument('--model_name', nargs="?", default='c-resunet',
+                        help='model_name')
+    parser.add_argument('--new_model_name', nargs="?", default='c-resunet',
+                        help='the name the model will have after resume another model name')
+    parser.add_argument('--loss_type', nargs="?", default='weighted',
+                        help='what kind of loss among weighted, unweighted')
+    parser.add_argument('--patience', nargs="?", type=int, default=5, help='patience for checkpoint')
+    parser.add_argument('--patience_lr', nargs="?", type=int, default=3, help='patience for early stopping')
+    parser.add_argument('--lr', nargs="?", type=int, default= 0.0001, help='learning rate value')
+    parser.add_argument('--epochs', nargs="?", type=int, default=200, help='number of epochs')
+    parser.add_argument('--bs', nargs="?", type=int, default=8, help='batch size')
+    parser.add_argument('--dataset', nargs="?", default='yellow', help='dataset flavour')
+
+    parser.add_argument('--few_shot', action='store_true',
+                        help='use a small dataset to train the model')
+    parser.add_argument('--self_supervised', action='store_true',
+                        help='use labels generated by the model')
+    parser.add_argument('--ae', action='store_true',
+                        help='autoencoder train of resunet')
+
+    parser.add_argument('--resume', action='store_true',
+                        help='resume training of the model specified with the model name')
+    parser.add_argument('--fine_tuning', action='store_true',
+                        help='fine tune the model or not')
+    parser.add_argument('--from_ae_to_binary', action='store_true',
+                        help='fine tune the model coming from autoencoder with pre binary layer')
+    parser.add_argument('--unfreezed_layers', default=1,
+                        help='number of layer to unfreeze for fine tuning can be a number or a block [encoder, decoder, head]')
+    args = parser.parse_args()
+
+    if not (Path(args.save_model_path).exists()):
         print('creating path')
-        os.makedirs(save_model_path)
-    ae = None
-    train(ae)
+        os.makedirs(args.save_model_path)
+    train(args=args)
+
+#--model_name c-resunet_y_ae --new_model_name c-resunt_y_ae_ft_last_layer_inverted --dataset yellow --resume --fine_tuning --from_ae_to_binary --few_shot --unfreezed_layers 1
+# --model_name c-resunet_y_ae --new_model_name c-resunt_y_ae_ft_decoder --dataset yellow --resume --fine_tuning --from_ae_to_binary --few_shot --unfreezed_layers 5

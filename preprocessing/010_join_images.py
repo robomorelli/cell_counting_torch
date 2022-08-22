@@ -44,21 +44,16 @@ def main():
             img_x = cv2.cvtColor(img_x, cv2.COLOR_BGR2RGB)
 
         try:
-
             img_y = cv2.imread(OriginalMasks + name)
             img_y = cv2.cvtColor(img_y, cv2.COLOR_BGR2RGB)[:, :, 0:1]
-
         except:
-
             name_y = name.replace('TIF', 'tif')
             img_y = cv2.imread(OriginalMasks + name_y)
             img_y = cv2.cvtColor(img_y, cv2.COLOR_BGR2RGB)[:, :, 0:1]
 
         if len(np.unique(img_y)) > 2:
             print('before the threshold we have more than 2 grayscale values {} {} {}'.format(ix, name, np.unique(img_y)))
-
             ret, img_y = cv2.threshold(img_y, 75, 255, cv2.THRESH_BINARY)
-
             print('after the threshold we have {} {} {}'.format(ix, name, np.unique(img_y)))
 
         img_y = img_y.astype(bool)

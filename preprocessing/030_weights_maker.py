@@ -23,30 +23,19 @@ import shutil
 from config import *
 from utils import *
 
-image_ids = os.listdir(CropMasks)
-image_ids.sort()
-ix = [int(x.split('.')[0]) for x in image_ids]
-ix.sort()
-image_ids = [str(x)+'.tiff' for x in ix]
+def main(args, color='y'):
 
+    CropMasks = args.CropMasks
+    #CropWeightedMasks =  (Path(args.CropMasks).parent).as_posix() + '/weighted_masks/'
+    CropWeightedMasks =  args.CropWeightedMasks
+    image_ids = os.listdir(CropMasks)
+    image_ids.sort()
+    color = args.color
 
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description='weighting masks')
-
-    parser.add_argument('--CropMasks', nargs="?", default = CropMasks, help='path including mask to weight')
-    parser.add_argument('--CropWeightedMasks', nargs="?", default = CropWeightedMasks, help='path where save weighted mask')
-    parser.add_argument('--save_images_path', nargs="?", default = CropImages, help='save images path')
-
-    parser.add_argument('--normalize', action='store_const', const=True, default=False, help='find the maximum for normalization filling the total array in 030_weights_maker.py')
-    parser.add_argument('--start_from_zero', action='store_const', const=True, default=False, help='delete all file in destination folder')
-    parser.add_argument('--continue_after_normalization', action='store_const', const=True, default=False,  help='after finding the maximum continue with the weighted maps creation')
-    parser.add_argument('--resume_after_normalization', action='store_const', const=True, default=True, help='If you stopped the weight maker after finding the max and you want to resum only the second step of the process')
-
-    parser.add_argument('--maximum', nargs="?", type = int, default = 3.8177538,  help='Maximum value for normalization')
-    parser.add_argument('--sigma', nargs="?", type = int, default = 25,  help='kernel for cumpling cell deacaying influence')
-
-    args = parser.parse_args()
+    if color == 'y':
+        ix = [int(x.split('.')[0]) for x in image_ids]
+        ix.sort()
+        image_ids = [str(x)+'.tiff' for x in ix]
 
     if args.start_from_zero:
         print('deleting existing files in destination folder')
@@ -55,34 +44,62 @@ if __name__ == "__main__":
         except:
             pass
         os.makedirs(CropWeightedMasks, exist_ok=True)
-
         print('start new weighting mask')
 
     # First step: find the maximum weight value
     if args.normalize:
-        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, maximum=False)
+        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k = args.dilation_kernel,
+                     maximum=False, color=args.color)
     # Second step following the first step: use the previous value to normalize the final weighted masks
-        if args.continue_after_normalization: 
-            with open('max_weight_{}.pickle'.format(sigma), 'rb') as handle:
+        if args.continue_after_normalization:
+            with open('max_weight_{}_{}.pickle'.format(args.sigma, args.color), 'rb') as handle:
                 dic = pickle.load(handle)
             maximum = dic['max_weight']
-            make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, maximum=maximum)
-    # Only the second step: you already get the maximum weight value 
+            make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k = args.dilation_kernel,
+                         maximum=maximum)
+    # Only the second step: you already get the maximum weight value
     elif args.resume_after_normalization:
         try:
-            with open('max_weight_{}.pickle'.format(sigma), 'rb') as handle:
+            with open('max_weight_{}_{}.pickle'.format(args.sigma, args.color), 'rb') as handle:
                 dic = pickle.load(handle)
             maximum = dic['max_weight']
-            make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, maximum=maximum)
+            make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k=args.dilation_kernel,
+                         maximum=maximum)
         except:
-            print('useing default value')
+            print('using default value')
             already_done = len(os.listdir(args.CropWeightedMasks))
-            ids = range(already_done, len(image_ids))
-
             image_ids_continue = image_ids[already_done:]
-
-            make_weights(image_ids_continue, args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, maximum=args.maximum)
+            make_weights(image_ids_continue, args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, dil_k=args.dilation_kernel,
+                         maximum=args.maximum)
 
     # Only the second step: you already get the maximum weight value and this is the default value passed with the args.maximum arguments
     else:
-        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, maximum=args.maximum)
+        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, maximum=args.maximum)
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='weighting masks')
+
+    parser.add_argument('--CropMasks', nargs="?", default = CropMasksSS, help='path including mask to weight')
+    parser.add_argument('--CropWeightedMasks', nargs="?", default = CropWeightedMasksSS, help='path where save weighted mask')
+    #parser.add_argument('--save_images_path', nargs="?", default = CropImages, help='save images path')
+
+    parser.add_argument('--normalize', action='store_const', const=True, default=True, help='find the maximum for normalization filling the total array in 030_weights_maker.py')
+    parser.add_argument('--start_from_zero', action='store_const', const=True, default=True, help='delete all file in destination folder')
+    parser.add_argument('--continue_after_normalization', action='store_const', const=True, default=True,  help='after finding the maximum continue with the weighted maps creation')
+    parser.add_argument('--resume_after_normalization', action='store_const', const=True, default=False, help='If you stopped the weight maker after finding the max and '
+                                                                                                              'you want to resum only the second step of the process')
+
+    parser.add_argument('--maximum', nargs="?", type = int, default = 6.224407196044922,  help='3.8177538 for yellow Maximum'
+                                                                                               ' value for normalization use 0 to make false')
+    parser.add_argument('--sigma', nargs="?", type = int, default = 19,  help='kernel for cumpling cell deacaying influence'
+                                                                             ',for yellow is suggested to use 25')
+    parser.add_argument('--dilation_kernel', nargs="?", type = int, default = 21,  help='kernel to dilate tjhe inverse of the targer (define the core)'
+                                                                                       '100 for yellow 21 for red')
+    parser.add_argument('--color', nargs="?", type=str, default='y', help='color specification (y or r) to save pickle with right suffix'
+                                                                         'it is needed only whne maximum=False and max value among'
+                                                                         'weights need to be found')
+
+    args = parser.parse_args()
+
+    main(args)

@@ -14,8 +14,9 @@ class ResunetRay(tune.Trainable):
     #setup function is invoked once training starts
     #setup function is invoked once training starts
     #setup function is invoked once training starts
-    use_cuda = config.get("use_gpu") and torch.cuda.is_available()
-    self.device = torch.device("cuda" if use_cuda else "cpu")
+    #use_cuda = config.get("use_gpu") and torch.cuda.is_available()
+    #self.device = torch.device("cuda" if use_cuda else "cpu")
+    self.device = torch.device("cuda" if False else "cpu")
 
     self.batch_size = config['batch_size']
     self.validation_split = config['validation_split']
@@ -72,6 +73,10 @@ if __name__ == "__main__":
       "w1": tune.choice([1, 1.5, 2])
   }
 
+    #make a config of different config for each model selected based on the model
+    # we want to tune
+
+
   save_model_path = Path(ModelResultsRay)
 
   if not (save_model_path.exists()):
@@ -82,7 +87,8 @@ if __name__ == "__main__":
   analysis = tune.run(ResunetRay,
                       scheduler=sched,
                       stop={"training_iteration": 10 ** 16},
-                      resources_per_trial={"cpu": 48, "gpu": 1},
+                      #resources_per_trial={"cpu": 48, "gpu": 1},
+                      resources_per_trial={"cpu": 2},
                       num_samples=1,
                       checkpoint_at_end=True,
                       local_dir=save_model_path.as_posix(),

@@ -1,16 +1,13 @@
-import torch
 from torch import nn
-from dataset_loader.image_loader import *
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision.transforms import transforms as T
 import torch.nn.functional as F
-import numpy as np
 import math
 import sys
+
 sys.path.append('..')
 from config import *
-from pathlib import Path
+from dataset_loader.image_loader import *
 
 clip_x_to0 = 1e-4
 
@@ -95,21 +92,36 @@ class ConstrainedConv2d(nn.Conv2d):
         return F.conv2d(input, self.weight.clamp(min=-1*10**6, max=1*10**6), self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
-def load_data_train_eval(batch_size=16, validation_split=0.3,images_path=AugCropImagesBasic,
-                         masks_path=AugCropMasksBasic, grayscale=False, num_workers=0,
-                         shuffle_dataset=True, random_seed=42, ngpus=1, ae=None):
+def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, grayscale=False, num_workers=0,
+                         shuffle_dataset=True, random_seed=42, ngpus=1, ae=False, few_shot=False, self_supervised=False):
 
-    #root = os.getcwd()
-    #root = Path(root).as_posix()
-    #if ae == "ae":
-    #    root = root + '/DATASET/train_val/crop_augmented_AE/'
-    #else:
-    #    root = root + '/DATASET/train_val/crop_augmented/'
 
     transform = T.Compose([T.Lambda(lambda x: x * 1. / 255),
                            T.ToTensor()
-                          #T.Lambda(lambda x: x.permute(2, 0, 1))
                            ])
+
+    if dataset == 'yellow':
+        if ae:
+            images_path = AugCropImagesAE
+            masks_path = AugCropImagesAE
+        elif few_shot:
+            images_path = AugCropImagesFS
+            masks_path = AugCropImagesFS
+        elif self_supervised:
+            images_path = CropImages
+            masks_path = CropWeightedMasksSS
+            print('image from {} and masks from {}'.format(CropImages, CropWeightedMasksSS))
+        else:
+            images_path = AugCropImages
+            masks_path = AugCropMasks
+    elif dataset == 'red':
+        images_path = AugCropImagesBasicR
+        masks_path = AugCropMasksBasicR
+    elif dataset == 'blu':
+        raise NotImplementedError
+    elif dataset == 'green':
+        raise NotImplementedError
+
     cells_images = CellsLoader(images_path, masks_path, val_split=0.3, grayscale=grayscale, transform=transform, ae=ae)
 
     dataset_size = len(cells_images)
@@ -185,18 +197,6 @@ def WeightedLoss(zero_weight, one_weight):
 
     return weighted_binary_crossentropy
 
-#def VAE_loss(bce_loss, mu, logvar):
-    #    """
-    #    This function will add the reconstruction loss (BCELoss) and the
-    #    KL-Divergence.
-    #    KL-Divergence = 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    #    :param bce_loss: recontruction loss
-    #    :param mu: the mean from the latent vector
-    #    :param logvar: log variance from the latent vector
-    #    """
-    #    BCE = bce_loss
-    #    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-#    return BCE + KLD
 def WeightedNLLLoss(zero_weight, one_weight):
 
     def weighted_NLL(mu, sigma, y):
@@ -216,47 +216,5 @@ def WeightedNLLLoss(zero_weight, one_weight):
 
     return weighted_NLL
 
-def loss_VAE(mu, sigma, x):
 
-    au = 0.5*torch.log(2*np.pi*(sigma*sigma)) #aleatoric uncertainty
-    ne = (torch.square(mu - x))/(2*torch.square(sigma))#normalized error
-    nll_loss = au + ne
-    sigma_mean = torch.mean(sigma, axis=1)
-    #return torch.mean(torch.sum(nll_loss, dim=[-1.-2])), au, ne
-    return torch.mean(nll_loss), torch.mean(au, axis=1), torch.mean(ne, axis=1), sigma_mean
-
-def loss_VAE_rec(mu, sigma, x):
-
-    au = 0.5*torch.log(2*np.pi*(sigma*sigma)) #aleatoric uncertainty
-    ne = (torch.square(mu - x))/(2*torch.square(sigma))#normalized error
-    nll_loss = au + ne
-    ## sum over channel to get the total sigma for each pixel
-    au_squared = torch.square(au)
-    au_1ch = torch.sqrt(torch.sum(au_squared, axis=1))
-    ne_squared = torch.square(ne)
-    ne_1ch = torch.sqrt(torch.sum(ne_squared, axis=1))
-
-    #return torch.sum(nll_loss), au, ne
-    return torch.mean(nll_loss), au, ne, au_1ch, ne_1ch
-
-def gaussian_loss(par1, par2, y):
-    # Gaussian distributed variables
-    mu = par1
-    sigma = par2
-    norm_y = torch.div(y - mu, sigma)
-    single_NLL = torch.log(sigma) + 0.5*torch.square(norm_y)
-    #nll_loss = torch.sum(single_NLL, axis=-1)
-    nll_loss = torch.sum(single_NLL, axis=(-1,-2))
-    return torch.sum(nll_loss)
-
-def KL_loss_forVAE(mu, sigma):
-    mu_prior = torch.tensor(0)
-    sigma_prior = torch.tensor(1)
-    kl_loss = torch.mul(torch.mul(sigma, sigma), torch.mul(sigma_prior,sigma_prior))
-    div = torch.div(mu_prior - mu, sigma_prior)
-    kl_loss += torch.mul(div, div)
-    kl_loss += torch.log(torch.div(sigma_prior, sigma)) -1
-    #kl_loss = torch.sum(kl_loss, axis=(-1,-2))
-    ##return 0.5 * torch.sum(kl_loss)
-    return 0.5 * torch.sum(kl_loss)
 
