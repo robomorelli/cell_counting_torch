@@ -16,6 +16,7 @@ Created on Sat Jul 20 13:00:41 2019
 
 @author: Luca Clissa
 """
+import torch
 
 from math import hypot
 from pathlib import Path
@@ -165,6 +166,63 @@ def compare_heatmaps(models_dict, test_img_path, test_masks_path, head=None):
             if counter == head:
                 break
     return (None)
+
+
+
+cuda = torch.cuda.is_available()
+device = torch.device("cuda" if cuda else "cpu")
+def compare_heatmaps_torch(models_dict, dataloader, head=None):
+    """Plot comparisons of all models in models_dict with bounding boxes for TP, FP, and FN.
+
+    :param models_dict: dictionary with structure {model name: model object}
+    :param head: either None or the number of plots to display
+
+    :return: None
+    """
+    from matplotlib import pyplot as plt
+
+    x, y = next(iter(dataloader))
+
+    counter = 0
+    for i, img in enumerate(x):
+
+        # fig, axes = plt.subplots(int(np.ceil(len(models_dict) / 2)), 2, figsize=(20, 6))
+        fig, axes = plt.subplots(1, len(models_dict) + 1, figsize=(20, 6))
+        # fig.suptitle(img_path.name, fontsize=22)
+        #print("\033[31m" + img_path.name)
+
+        original = x[i].permute(1, 2, 0)
+        target = y[i].permute(1, 2, 0)
+
+        # original image + true objects
+        axes[0].imshow(original, cmap=plt.cm.RdBu)
+        axes[0].contour(target, [0.5], linewidths=1.2, colors='w')
+        axes[0].set_title('Original image and mask')
+
+        # predictions
+        img_rgb = np.expand_dims(img_rgb, 0)
+        for idx, model_item in enumerate(models_dict.items()):
+            model_name, model = model_item[0], model_item[1]
+
+            model.eval()
+            with torch.no_grad():
+                heatmap = model(x[i].to(device))
+
+            #pred_mask_rgb = np.squeeze(model.predict(img_rgb / 255.))
+            im = axes[idx + 1].pcolormesh(np.flipud(heatmap), cmap='jet')
+            divider = make_axes_locatable(axes[idx + 1])
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            axes[idx + 1].set_title(r"$\bf{{{}}}$".format(model_name.replace('_', '-')))
+        plt.show()
+        counter += 1
+        if counter == head:
+            break
+    return (None)
+
+
+
+
 
 
 def plot_postprocessing_effect(model, test_img_path, threshold, head=None, suptitle=True, example_only=False):

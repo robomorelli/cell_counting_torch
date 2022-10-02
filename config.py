@@ -141,6 +141,7 @@ AugCropMasksAE = root + '/DATASET/train_val/crop_augmented_AE/masks/'
 AugCropImagesFS = root + '/DATASET/train_val/few_shot/images/'
 AugCropMasksFS = root + '/DATASET/train_val/few_shot/masks/'
 
+
 #AugCropMasksSS = root + '/DATASET/train_val/self_supervised/masks/'
 AugCropMasksSS = root + '/DATASET/train_val/self_supervised/weighted_masks_augmented/'
 
@@ -177,6 +178,29 @@ AugCropMasksBasicSplittedR = root + '/DATASET/fine_tuning/red/train_val/crop_aug
 AugCropImagesAER = root + '/DATASET/fine_tuning/red/train_val/crop_augmented_AE/images/'
 AugCropMasksAER = root + '/DATASET/fine_tuning/red/train_val/crop_augmented_AE/masks/'
 
+AugCropImagesFewShotR = root + '/DATASET/fine_tuning/red/train_val/few_shot/images/'
+AugCropMasksFewShotR = root + '/DATASET/fine_tuning/red/train_val/few_shot/masks/'
+
+SelfSuperImagesR = root + '/DATASET/self_supervised/images/'
+SelfSuperMasksR = root + '/DATASET/self_supervised/masks/'
+AugSelfSuperImagesR = root + '/DATASET/self_supervised/aug_images/'
+AugSelfSuperMasksR= root + '/DATASET/self_supervised/aug_masks/'
+
+if not os.path.exists(SelfSuperImagesR):
+    os.makedirs(SelfSuperImagesR)
+if not os.path.exists(SelfSuperMasksR):
+    os.makedirs(SelfSuperMasksR)
+
+if not os.path.exists(AugSelfSuperImagesR):
+    os.makedirs(AugSelfSuperImagesR)
+if not os.path.exists(AugSelfSuperMasksR):
+    os.makedirs(AugSelfSuperMasksR)
+
+if not os.path.exists(AugCropImagesFewShotR):
+    os.makedirs(AugCropImagesFewShotR)
+if not os.path.exists(AugCropMasksFewShotR):
+    os.makedirs(AugCropMasksFewShotR)
+
 if not os.path.exists(AugCropImagesR):
     os.makedirs(AugCropImagesR)
 if not os.path.exists(AugCropMasksR):
@@ -187,8 +211,11 @@ if not os.path.exists(AugCropImagesBasicR):
 if not os.path.exists(AugCropMasksBasicR):
     os.makedirs(AugCropMasksBasicR)
 
+
 if not os.path.exists(AugCropImagesAER):
     os.makedirs(AugCropImagesAER)
+if not os.path.exists(AugCropMasksAER):
+    os.makedirs(AugCropMasksAER)
 
 ModelResults = root + '/model_results/'
 ModelResultsRay = root + '/model_results_ray/'

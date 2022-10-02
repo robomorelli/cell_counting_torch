@@ -308,6 +308,118 @@ def data_aug_red(image, mask, image_id, nlabels_tar, minimum, maximum):
         return image, mask
 
 
+def data_aug_redSS(image, mask, image_id, nlabels_tar, minimum, maximum):
+
+    gaussian = random.random()
+    generic_transf = random.random()
+    elastic = random.random()
+    distorted = random.random()
+
+    if generic_transf < 0.65:
+
+        augmentation = lookup_tiff_augR(p=1)
+        data = {"image": image}
+        augmented = augmentation(**data)
+        image = augmented["image"]
+
+        augmentation = shifterR(p=0.8)
+        data = {"image": image, "mask": mask}
+        augmented = augmentation(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        if gaussian <= 0.80:
+            gaussian_blur = GaussianR(p=1, blur_limit=31)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+            mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+    if elastic < 0.95:
+
+        alfa = random.choice([50, 60, 60, 65, 65, 65, 70])
+        alfa_affine = random.choice([20, 20, 35, 40, 40])
+        sigma = random.choice([10, 25, 15, 20, 20, 25])
+        #         alfa = random.choice([350, 400])
+        #         alfa_affine = random.choice([100, 150])
+        #         sigma = random.choice([50, 75])
+        elastic = elastic_defR(alfa, alfa_affine, sigma, p=1)
+        data = {"image": image, "mask": mask}
+        augmented = elastic(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        if gaussian <= 0.25:
+            gaussian_blur = GaussianR(p=1, blur_limit=13)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+            mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+    if distorted < 1:
+
+        augmentation = shifterR(p=1)
+        data = {"image": image, "mask": mask}
+        augmented = augmentation(**data)
+        image, mask = augmented["image"], augmented["mask"]
+
+        if gaussian <= 0.15:
+            gaussian_blur = GaussianR(p=1, blur_limit=15)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+        mask[:, :, 1:2] = np.clip(mask[:, :, 1:2], minimum, maximum)
+
+        return image, mask
+
+
+def data_aug_red_ae(image, image_id):
+
+    gaussian = random.random()
+    generic_transf = random.random()
+    #elastic = random.random()
+    salt_pepper = random.random()
+
+    if salt_pepper < 0.3:
+        RGB_noise = SaltAndPepperNoise(noiseType="SnP")
+        image = RGB_noise(image)
+
+        return image
+
+    if generic_transf < 0.65:
+        augmentation = lookup_tiff_augR(p=1)
+        data = {"image": image}
+        augmented = augmentation(**data)
+        image = augmented["image"]
+
+        if gaussian <= 0.25:
+            gaussian_blur = GaussianR(p=1, blur_limit=15)
+            data = {"image": image}
+            augmented = gaussian_blur(**data)
+            image = augmented["image"]
+
+        return image
+
+    else:
+        gaussian_blur = GaussianR(p=1, blur_limit=15)
+        data = {"image": image}
+        augmented = gaussian_blur(**data)
+        image = augmented["image"]
+
+        return image
+
+
+
+
 def lookup_tiff_augR(p=0.5):
     return Compose([
 

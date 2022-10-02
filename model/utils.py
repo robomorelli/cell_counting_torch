@@ -93,18 +93,26 @@ class ConstrainedConv2d(nn.Conv2d):
                         self.padding, self.dilation, self.groups)
 
 def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, grayscale=False, num_workers=0,
-                         shuffle_dataset=True, random_seed=42, ngpus=1, ae=False, few_shot=False, self_supervised=False):
+                         shuffle_dataset=True, random_seed=42, ngpus=1,
+                         ae=False, ae_bin=False, few_shot=False, few_shot_merged=False,
+                         self_supervised=False):
 
 
     transform = T.Compose([T.Lambda(lambda x: x * 1. / 255),
                            T.ToTensor()
                            ])
+    transform_l = T.Compose([
+                           T.ToTensor()
+                           ])
 
     if dataset == 'yellow':
-        if ae:
+        if ae or ae_bin:
             images_path = AugCropImagesAE
             masks_path = AugCropImagesAE
         elif few_shot:
+            images_path = AugCropImagesFS
+            masks_path = AugCropImagesFS
+        elif few_shot_merged:
             images_path = AugCropImagesFS
             masks_path = AugCropImagesFS
         elif self_supervised:
@@ -115,14 +123,27 @@ def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, 
             images_path = AugCropImages
             masks_path = AugCropMasks
     elif dataset == 'red':
-        images_path = AugCropImagesBasicR
-        masks_path = AugCropMasksBasicR
+        if ae or ae_bin:
+            images_path = AugCropImagesAER
+            masks_path = AugCropImagesAER
+        elif few_shot:
+            images_path = AugCropImagesFewShotR
+            masks_path = AugCropMasksFewShotR
+        elif self_supervised:
+            images_path = AugSelfSuperImagesR
+            masks_path = AugSelfSuperMasksR
+        else:
+            images_path = AugCropImagesBasicR
+            masks_path = AugCropMasksBasicR
     elif dataset == 'blu':
         raise NotImplementedError
     elif dataset == 'green':
         raise NotImplementedError
 
-    cells_images = CellsLoader(images_path, masks_path, val_split=0.3, grayscale=grayscale, transform=transform, ae=ae)
+    if self_supervised:
+        cells_images = SelfSupervised(images_path, val_split=0.3, grayscale=grayscale, transform=[transform, transform_l])
+    else:
+        cells_images = CellsLoader(images_path, masks_path, val_split=0.3, grayscale=grayscale, transform=transform, ae=ae)
 
     dataset_size = len(cells_images)
     print('dataset size is {}'.format(dataset_size))
@@ -191,6 +212,39 @@ def WeightedLoss(zero_weight, one_weight):
         #we should first make a sum reduction on rows and column and then take a mean over element of batch
         #s1 = torch.sum(weighted_b_ce, axis=-2)
         #s2 = torch.sum(s1, axis=-1)
+
+        # Return the mean error
+        return torch.mean(weighted_b_ce)
+
+    return weighted_binary_crossentropy
+
+def WeightedLossAE(zero_weight, one_weight):
+
+    def weighted_binary_crossentropy(y_pred, y_true):
+
+        #channel = np.random.randint(0,2,1)
+        b_ce = nn.BCELoss(reduction='none')(y_pred[:, 0:1, :, :].float(), y_true[:, 0:1, :, :].float())
+        # Apply the weights
+        weighted_b_ce = y_true[:,1:2,:,:] * b_ce
+
+        #we should first make a sum reduction on rows and column and then take a mean over element of batch
+        #s1 = torch.sum(weighted_b_ce, axis=-2)
+        #s2 = torch.sum(s1, axis=-1)
+
+        # Return the mean error
+        return torch.mean(weighted_b_ce)
+
+    return weighted_binary_crossentropy
+
+def UnweightedLoss(zero_weight, one_weight):
+
+    def weighted_binary_crossentropy(y_pred, y_true):
+
+        #b_ce = nn.BCEWithLogitsLoss(reduction = 'none')(y_true[:,0:1,:,:].float(), y_pred[:,0:1,:,:].float()) #try without reduction
+        b_ce = nn.BCELoss(reduction='none')(y_pred[:, 0:1, :, :].float(), y_true[:, 0:1, :, :].float())
+        # Apply the weights
+        class_weight_vector = y_true[:,0:1,:,:] * one_weight + (1. - y_true[:,0:1,:,:]) * zero_weight
+        weighted_b_ce = class_weight_vector * b_ce
 
         # Return the mean error
         return torch.mean(weighted_b_ce)

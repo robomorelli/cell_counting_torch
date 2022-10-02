@@ -11,7 +11,7 @@
 #  #See the License for the specific language governing permissions and
 #  #limitations under the License.
 __all__ = ['_get_ltype', 'Add', 'Concatenate', 'ConvBlock', 'ResidualBlock', 'UpResidualBlock', 'Bottleneck',
-           'Heatmap', 'Heatmap2d', 'HeatmapAE']
+           'Heatmap', 'Heatmap2d', 'HeatmapAE', 'Embedding']
 
 from fastai.vision.all import *
 from ._utils import *
@@ -94,7 +94,6 @@ class IdentityPath(nn.Module):
         return getattr(self, self.layer_name)(x)
 
 
-
 class ResidualBlock(nn.Module):
     def __init__(self, n_in, n_out, kernel_size=3, stride=1, padding=1, is_conv=True):
         super(ResidualBlock, self).__init__()
@@ -172,3 +171,10 @@ class Heatmap2d(nn.Module):
         heatmap1 = self.heatmap(x)
         heatmap0 = torch.ones_like(heatmap1) - heatmap1
         return self.concat([heatmap0, heatmap1])
+
+class Embedding(nn.Module):
+    def __init__(self, features_size, code_dim):
+        super(Embedding, self).__init__()
+        self.head = nn.Linear(features_size, code_dim)
+    def forward(self, x):
+        return self.head(x)

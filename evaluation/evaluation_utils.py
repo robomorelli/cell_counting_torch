@@ -8,8 +8,8 @@ import numpy as np
 
 import cv2
 
-from keras import backend as K
-import tensorflow as tf
+#from keras import backend as K
+#import tensorflow as tf
 
 ### Model utils
 def mean_iou(y_true, y_pred):

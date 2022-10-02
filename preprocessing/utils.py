@@ -50,8 +50,8 @@ def read_images(path, image_id):
 
 def read_image_masks(image_id, images_path,  masks_path):
 
-        x = cv2.imread(images_path + image_id)
-        image = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
+        image = cv2.imread(images_path + image_id)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         mask = cv2.imread(masks_path + image_id)
         mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
 
@@ -288,3 +288,96 @@ def make_weights(image_ids,  LoadMasksForWeight, SaveWeightMasks, sigma = 25, di
     return
 
 
+def make_cropperSS(image_ids, images_path , masks_path, SaveCropImages, SaveCropMasks,
+                 XCropSize, YCropSize, XCropCoord, YCropCoord, color = 'y',
+                  shift = 0):
+
+    if XCropCoord > XCropSize or YCropCoord > YCropSize:
+        raise Exception("Not overlapping patch, the crop coord should be lesser than crop size (x or y dimension)")
+
+    ix = shift
+    flag_new_images = False
+
+    for ax_index, name in enumerate(image_ids):
+        print(name.split('.')[0])
+        if color == 'y':
+            if (int(name.split('.')[0]) >= 252) & (not(flag_new_images)):
+                print('start cropping on new images at ids {}'.format(ix))
+                dic = {}
+                dic['id_new_images'] = ix
+                with open('../id_new_images.pickle', 'wb') as handle:
+                     pickle.dump(dic, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                flag_new_images = True
+
+
+        image, mask = read_image_masks_r(name, images_path, masks_path)
+        mask = np.squeeze(mask[:, :, 0:1])
+
+        img_height, img_width, c = image.shape
+
+        XCropNum = int(img_width/XCropCoord)
+        YCropNum = int(img_height/YCropCoord)
+
+        NumCropped = int(img_width/XCropCoord * img_height/YCropCoord)
+
+        # to allign the last crop with the last side parte of the image
+        YShift = YCropSize - YCropCoord
+        XShift = XCropSize - XCropCoord
+
+        #x_coord = [XCropCoord*i for i in range(0, XCropNum+1)]
+        #y_coord = [YCropCoord*i for i in range(0, YCropNum+1)]
+
+        # without +1 in range(0, XCropNum +1) by construction the last crop is inside the boundary of the image
+        # we can always add a last crop with corner coord
+        x_coord = [XCropCoord*i for i in range(0, XCropNum)]
+        y_coord = [YCropCoord*i for i in range(0, YCropNum)]
+
+        corner_cords_x = img_width - XCropSize
+        corner_cords_y = img_height - YCropSize
+
+        if y_coord[-1] + YCropSize > img_height:
+            y_coord.pop()
+            y_coord.append((corner_cords_y))
+        if x_coord[-1] + XCropSize > img_width:
+            x_coord.pop()
+            x_coord.append((corner_cords_x))
+
+        y_coord.sort()
+        x_coord.sort()
+
+        CroppedImages, CroppedMasks = cropperSS(image, mask, NumCropped, XCropSize, YCropSize,
+                                             x_coord, y_coord, XCropNum, YCropNum,
+                                             XShift, YShift)
+
+        for i in range(0,NumCropped):
+            ret, img_y = cv2.threshold(CroppedMasks[i], 75, 255, cv2.THRESH_BINARY)
+            img_y = img_y.astype(bool)
+            if np.sum(img_y==1) > ((CroppedMasks[i].size)//16):
+                crop_imgs_dir = SaveCropImages + '{}_{}_label1label.tiff'.format(name.split('.')[0],i)
+                crop_masks_dir = SaveCropMasks + '{}_{}_label1label.tiff'.format(name.split('.')[0],i)
+                plt.imsave(fname= crop_imgs_dir, arr = CroppedImages[i])
+                plt.imsave(fname= crop_masks_dir,arr = img_y, cmap='gray')
+                ix +=1
+            else:
+                if np.random.random(1) > 0.95:
+                    crop_imgs_dir = SaveCropImages + '{}_{}_label0label.tiff'.format(name.split('.')[0],i)
+                    crop_masks_dir = SaveCropMasks + '{}_{}_label0label.tiff'.format(name.split('.')[0],i)
+                    plt.imsave(fname= crop_imgs_dir, arr = CroppedImages[i])
+                    plt.imsave(fname= crop_masks_dir,arr = img_y, cmap='gray')
+                    ix +=1
+    return
+
+def cropperSS(image, mask, NumCropped, XCropSize, YCropSize
+            ,x_coord, y_coord ,XCropNum, YCropNum, XShift, YShift):
+
+    CroppedImgs = np.zeros((NumCropped, YCropSize, XCropSize, 3), np.uint8)
+    CroppedMasks = np.zeros((NumCropped, YCropSize, XCropSize), np.uint8)
+    idx = 0
+
+    for i in range(0, XCropNum):
+        for j in range(0, YCropNum):
+                CroppedImgs[idx] = image[y_coord[j]:y_coord[j]+YCropSize, x_coord[i]:x_coord[i]+XCropSize]
+                CroppedMasks[idx] = mask[y_coord[j]:y_coord[j]+YCropSize, x_coord[i]:x_coord[i]+XCropSize]
+                idx +=1
+
+    return CroppedImgs, CroppedMasks
