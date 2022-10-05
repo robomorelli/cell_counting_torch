@@ -44,18 +44,18 @@ def train(ae=None):
                                     , masks_path=AugCropMasks, grayscale = False, num_workers=num_workers,
                                     shuffle_dataset=True, random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra'
-    resume = False
+    model_name = 'hydra_scale10_2epochs'
+    resume = True
 
     if resume:
-        resume_path = ModelResults + model_name
+        resume_path = ModelResults + model_name + '.h5'
         if os.path.isfile(resume_path):
             print("=> loading checkpoint '{}'".format(resume_path))
             if device == 'cpu':
                 checkpoint = torch.load(resume_path)
             else:
                 # Map model to be loaded to specified single gpu.
-                model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, n_out=1, n_outRec=3,
+                model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, n_out=1, n_outRec=3, fully_conv=False,
                                                      pretrained=False, progress=True)).to(device)
                 model.load_state_dict(torch.load(resume_path))
                 #checkpoint = torch.load(args.resume, map_location=loc)
@@ -72,10 +72,10 @@ def train(ae=None):
         else:
             print("=> no checkpoint found at '{}'".format(resume_path))
             model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=3, fully_conv=False,
-                                      pretrained=False, resume=model_name, progress=True, device=device).to(device))
+                                      pretrained=False, progress=True, device=device).to(device))
     else:
         model = nn.DataParallel(c_resunetVAE(arch='c-ResUnetVAE', n_features_start=16, zDIm=64, n_out=1, n_outRec=3,
-                                             pretrained=False, resume=model_name, progress=True, device=device).to(device))
+                                             pretrained=False, progress=True, device=device).to(device))
 
     #Train Loop####
     """
@@ -85,7 +85,7 @@ def train(ae=None):
     patience = 5
     patience_lr = 3
     lr = 0.0001
-    epochs = 200
+    epochs = 2
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr,
                                                 threshold=0.0001,threshold_mode='rel', cooldown=0,

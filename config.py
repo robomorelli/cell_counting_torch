@@ -110,7 +110,7 @@ if not os.path.exists(AugCropMasksBasic):
 if not os.path.exists(AugCropImagesAE):
     os.makedirs(AugCropImagesAE)
 
-ModelResults = root + '/model_results_torch/'
+ModelResults = root + '/model_results_unc_exp/'
 ModelResultsRay = root + '/model_results_torch_ray/'
 
 if not os.path.exists(ModelResults):
