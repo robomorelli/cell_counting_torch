@@ -92,7 +92,7 @@ class ConstrainedDec(nn.Linear):
 
 class ConstrainedConv2d(nn.Conv2d):
     def forward(self, input):
-        return F.conv2d(input, self.weight.clamp(min=-1, max=1), self.bias, self.stride, #constraint=1*10**6
+        return F.conv2d(input, self.weight.clamp(min=-1*10**6, max=1*10**6), self.bias, self.stride, #constraint=1*10**6
                         self.padding, self.dilation, self.groups)
 
 def load_data_train_eval(batch_size=16, validation_split=0.3,images_path=AugCropImages, ####Before was AugCropImagesBasic

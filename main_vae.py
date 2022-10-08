@@ -44,7 +44,7 @@ def train(ae=None):
                                     , masks_path=AugCropMasks, grayscale = False, num_workers=num_workers,
                                     shuffle_dataset=True, random_seed=42, ngpus=ngpus, ae=ae)
 
-    model_name = 'hydra_scale10_2epochs'
+    model_name = 'hydra_scale10'
     resume = True
 
     if resume:
@@ -85,7 +85,7 @@ def train(ae=None):
     patience = 5
     patience_lr = 3
     lr = 0.0001
-    epochs = 2
+    epochs = 10
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',  factor=0.8, patience=patience_lr,
                                                 threshold=0.0001,threshold_mode='rel', cooldown=0,
@@ -146,23 +146,24 @@ def train(ae=None):
                     temp_val_loss = temp_val_loss / len(validation_loader)
                     print('validation_loss {}'.format(temp_val_loss))
                     scheduler.step(temp_val_loss)
-                    if temp_val_loss < val_loss:
-                        print('val_loss improved from {} to {}, saving model to {}' \
-                              .format(val_loss, temp_val_loss, save_model_path))
-                        path_posix = (save_model_path / model_name).as_posix()
-                        save_path = path_posix + '.h5'
-                        torch.save(model.state_dict(), save_path)
-                        #torch.save(model.state_dict(), save_model_path / model_name)
-                        val_loss = temp_val_loss
-                    early_stopping(temp_val_loss)
-                    if early_stopping.early_stop:
-                        break
+                    #if temp_val_loss < val_loss:
+                        #print('val_loss improved from {} to {}, saving model to {}' \
+                        #      .format(val_loss, temp_val_loss, save_model_path))
+                    path_posix = (save_model_path / model_name).as_posix()
+                    save_path = path_posix + '_{}.h5'.format(epoch)
+                    print('saving at epoch {}'.format(epoch))
+                    torch.save(model.state_dict(), save_path)
+                    #torch.save(model.state_dict(), save_model_path / model_name)
+                    val_loss = temp_val_loss
+                    #early_stopping(temp_val_loss)
+                    #if early_stopping.early_stop:
+                    #    break
 
 if __name__ == "__main__":
     ###############################################
     # TO DO: add parser for parse command line args
     ###############################################
-    save_model_path = Path('./model_results_torch')
+    save_model_path = Path('./model_results_torch_unc_exp/epochs/')
     if not (save_model_path.exists()):
         print('creating path')
         os.makedirs(save_model_path)
