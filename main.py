@@ -198,7 +198,6 @@ def train(args):
                                                                threshold=0.0001, threshold_mode='rel', cooldown=0,
                                                                min_lr=9e-8, verbose=True)
         early_stopping = EarlyStopping(patience=args.patience)
-
         #Train Loop####
         """
         Set the model to the training mode first and train
@@ -249,14 +248,16 @@ def train(args):
                         temp_val_loss = temp_val_loss / len(validation_loader)
                         print('validation_loss {}'.format(temp_val_loss))
                         scheduler.step(temp_val_loss)
-                        if temp_val_loss < val_loss:
-                            print('val_loss improved from {} to {}, saving model to {}' \
-                                  .format(val_loss, temp_val_loss, args.save_model_path + added_path + args.model_name))
-                            path_posix = args.save_model_path + added_path + args.model_name
-                            save_path = path_posix + '.h5'
-                            torch.save(model.state_dict(), save_path)
-                            #torch.save(model.state_dict(), save_model_path / model_name)
-                            val_loss = temp_val_loss
+                        #if temp_val_loss < val_loss:
+                            #print('val_loss improved from {} to {}, saving model to {}' \
+                            #      .format(val_loss, temp_val_loss, args.save_model_path + added_path + args.model_name))
+                        print("saving model to {}".format(args.save_model_path + added_path + args.model_name))
+                        path_posix = args.save_model_path + added_path + args.model_name
+                        save_path = path_posix + '_{}.h5'.format(epoch)
+                        torch.save(model.state_dict(), save_path)
+                        #torch.save(model.state_dict(), save_model_path / model_name)
+                        val_loss = temp_val_loss
+
                         early_stopping(temp_val_loss)
                         if early_stopping.early_stop:
                             break
