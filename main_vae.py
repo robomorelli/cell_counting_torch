@@ -163,7 +163,7 @@ if __name__ == "__main__":
     ###############################################
     # TO DO: add parser for parse command line args
     ###############################################
-    save_model_path = Path('./model_results_torch_unc_exp/epochs/')
+    save_model_path = Path('./model_results_vae_exp/epochs/')
     if not (save_model_path.exists()):
         print('creating path')
         os.makedirs(save_model_path)
