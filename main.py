@@ -51,28 +51,33 @@ def train(args):
                                     few_shot=args.few_shot,
                                     self_supervised=args.self_supervised)
 
-
+    if args.resume or args.fine_tuning:
+        resume_path = str(args.resume_path) + '/{}/{}'.format(args.model_name, args.model_name + '.h5')
+        args.model_name = args.new_model_name
 
     if args.fine_tuning:
         if args.few_shot:
-            added_path = 'fine_tuning/few_shot/{}/'.format(args.dataset)
+            added_path = 'fine_tuning/few_shot/{}/{}/'.format(args.dataset, args.model_name)
         elif args.few_shot_merged:
-            added_path = 'fine_tuning/few_shot_merged/{}/'.format(args.dataset)
+            added_path = 'fine_tuning/few_shot_merged/{}/{}/'.format(args.dataset, args.model_name)
         else:
-            added_path = 'fine_tuning/{}/'.format(args.dataset)
+            added_path = 'fine_tuning/{}/{}/'.format(args.dataset, args.model_name)
     elif args.ae or args.ae_bin:
-        added_path = 'autoencoder/{}/'.format(args.dataset)
+        added_path = 'autoencoder/{}/{}/'.format(args.dataset, args.model_name)
     elif args.few_shot:
-        added_path = 'few_shot/{}/'.format(args.dataset)
+        added_path = 'few_shot/{}/{}/'.format(args.dataset, args.model_name)
     elif args.few_shot_merged:
-        added_path = 'few_shot_merged/{}/'.format(args.dataset)
+        added_path = 'few_shot_merged/{}/{}/'.format(args.dataset, args.model_name)
     elif args.self_supervised:
-        added_path = 'self_supervised/{}/'.format(args.dataset)
+        added_path = 'self_supervised/{}/{}/'.format(args.dataset, args.model_name)
     else:
-        added_path = 'supervised/{}/'.format(args.dataset)
+        added_path = 'supervised/{}/{}/'.format(args.dataset, args.model_name)
+
+    if args.monitor_epochs:
+        added_path = added_path + 'epochs/'
 
     if os.path.exists(args.save_model_path + added_path):
-        print("path exists")
+        print(" path exists", args.save_model_path + added_path)
     else:
         os.makedirs(args.save_model_path + added_path)
 
@@ -151,7 +156,6 @@ def train(args):
 
     else:
         if args.resume or args.fine_tuning:
-            resume_path = args.save_model_path + added_path + args.model_name + '.h5'
             if os.path.isfile(resume_path):
                 print("=> loading checkpoint '{}'".format(resume_path))
                 if device == 'cpu':
@@ -248,15 +252,15 @@ def train(args):
                         temp_val_loss = temp_val_loss / len(validation_loader)
                         print('validation_loss {}'.format(temp_val_loss))
                         scheduler.step(temp_val_loss)
-                        #if temp_val_loss < val_loss:
-                            #print('val_loss improved from {} to {}, saving model to {}' \
-                            #      .format(val_loss, temp_val_loss, args.save_model_path + added_path + args.model_name))
-                        print("saving model to {}".format(args.save_model_path + added_path + args.model_name))
-                        path_posix = args.save_model_path + added_path + args.model_name
-                        save_path = path_posix + '_{}.h5'.format(epoch)
-                        torch.save(model.state_dict(), save_path)
-                        #torch.save(model.state_dict(), save_model_path / model_name)
-                        val_loss = temp_val_loss
+                        if temp_val_loss < val_loss:
+                            print('val_loss improved from {} to {}, saving model to {}' \
+                                  .format(val_loss, temp_val_loss, args.save_model_path + added_path + args.model_name))
+                            print("saving model to {}".format(args.save_model_path + added_path + args.model_name))
+                            path_posix = args.save_model_path + added_path + args.model_name
+                            save_path = path_posix + '_{}.h5'.format(epoch)
+                            torch.save(model.state_dict(), save_path)
+                            #torch.save(model.state_dict(), save_model_path / model_name)
+                            val_loss = temp_val_loss
 
                         early_stopping(temp_val_loss)
                         if early_stopping.early_stop:
@@ -269,7 +273,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Define parameters for test.')
     parser.add_argument('--save_model_path', nargs="?", default=ModelResults,
                         help='the folder including the masks to crop')
-    parser.add_argument('--model_name', nargs="?", default='c-resunet',
+    parser.add_argument('--model_name', nargs="?", default='c-resunet_y',
                         help='model_name')
     parser.add_argument('--new_model_name', nargs="?", default='c-resunet',
                         help='the name the model will have after resume another model name')
@@ -280,7 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', nargs="?", type=int, default= 0.0001, help='learning rate value')
     parser.add_argument('--epochs', nargs="?", type=int, default=200, help='number of epochs')
     parser.add_argument('--bs', nargs="?", type=int, default=8, help='batch size')
-    parser.add_argument('--dataset', nargs="?", default='red', help='dataset flavour')
+    parser.add_argument('--dataset', nargs="?", default='yellow', help='dataset flavour')
 
 
     parser.add_argument('--c0', type=int,default=1,
@@ -302,6 +306,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--resume', action='store_true',
                         help='resume training of the model specified with the model name')
+    parser.add_argument('--resume_path', default=ModelResults)
+
     parser.add_argument('--fine_tuning', action='store_true',
                         help='fine tune the model or not')
     parser.add_argument('--from_ae_to_binary', action='store_true',
@@ -310,6 +316,8 @@ if __name__ == "__main__":
                         help='fine tune the model coming from autoencoder with pre binary layer')
     parser.add_argument('--unfreezed_layers', default=1,
                         help='number of layer to unfreeze for fine tuning can be a number or a block [encoder, decoder, head]')
+    parser.add_argument('--monitor_epochs', action='store_true',
+                        help='save each epoch with different model name if val loss is improved')
     args = parser.parse_args()
 
     if not (Path(args.save_model_path).exists()):

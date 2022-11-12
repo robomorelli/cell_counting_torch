@@ -166,7 +166,7 @@ def load_model(resume_path, device, n_features_start=16, n_out=1, ae_bin=False, 
                     else:
                         for n, p in cc.named_parameters():
                             p.requires_grad_(False)
-                            #print(block, n, p.requires_grad)
+
                 unfreezed_layers = int(unfreezed_layers) - 1
 
             else:
