@@ -499,7 +499,7 @@ def GaussianR(p=.5, blur_limit=9):
     ], p=p)
 
 
-def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_new_images,
+def data_aug_y(image_ids, images_path, masks_path, split_num, id_start_new_images,
                         split_num_new_images, id_edges, SaveAugImages, SaveAugMasks, ix, unique_split,
                         no_artifact_aug, ae=False):
 
@@ -514,9 +514,7 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
             image, _ = read_image_masks(image_id, images_path, masks_path)
 
             split_num_im = 1
-
             print('image {} on {} params: {}-{}'.format(ax_index, tot, ID, split_num_im))
-
             for i in range(split_num_im):
                 elastic = random.random()
                 RGB_noise = SaltAndPepperNoise(noiseType="SnP")
@@ -534,17 +532,14 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
                 aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
                 ix += 1
                 plt.imsave(fname=aug_img_dir, arr=new_image)
-
         return
-
     else:
         # for ax_index, image_id in tqdm(enumerate(image_ids),total=len(image_ids)):
         tot = len(image_ids)
         for ax_index, image_id in enumerate(image_ids):
-            ID = int(image_id.split('.')[0])
-
+            ID_str = image_id.split('.')[0]
+            ID = int(image_id.split('.')[0].split('_')[0])
             image, mask = read_image_masks(image_id, images_path, masks_path)
-
             minimum = mask[:, :, 1:2].min()
             maximum = mask[:, :, 1:2].max()
             labels_tar, nlabels_tar = ndimage.label(np.squeeze(mask[:, :, 0:1]))
@@ -559,7 +554,7 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
 
             print('image {} on {} params: {}-{}'.format(ax_index, tot, ID, split_num_im))
 
-            if (ID in id_edges) & (not (no_artifact_aug)):
+            if (ID_str in id_edges) & (not (no_artifact_aug)):
                 print(ID, ix)
                 for i in range(80):
                     image, mask = read_image_masks(image_id, images_path, masks_path)
@@ -576,8 +571,8 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
 
                     new_mask[:, :, 1:2] = np.clip(new_mask[:, :, 1:2], minimum, maximum)
 
-                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID_str, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID_str, i)
                     ix += 1
 
                     plt.imsave(fname=aug_img_dir, arr=new_image)
@@ -598,8 +593,8 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
                     new_mask[:, :, 1:2] = np.clip(new_mask[:, :, 1:2], minimum, maximum)
 
                     # '{}.tiff'.format(ix)
-                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID_str, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID_str, i)
                     ix += 1
 
                     plt.imsave(fname=aug_img_dir, arr=new_image)
@@ -614,8 +609,8 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
                     augmented = gaussian_blur(**data)
                     new_image = augmented["image"]
 
-                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID_str, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID_str, i)
                     ix += 1
 
                     plt.imsave(fname=aug_img_dir, arr=new_image)
@@ -626,8 +621,8 @@ def augmentation_yellow(image_ids, images_path, masks_path, split_num, id_start_
                 for i in range(split_num_im):
                     new_image, new_mask = data_aug(image, mask, image_id, nlabels_tar, minimum, maximum)
 
-                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID, i)
-                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID, i)
+                    aug_img_dir = SaveAugImages + '{}_{}.tiff'.format(ID_str, i)
+                    aug_mask_dir = SaveAugMasks + '{}_{}.tiff'.format(ID_str, i)
                     ix += 1
 
                     plt.imsave(fname=aug_img_dir, arr=new_image)

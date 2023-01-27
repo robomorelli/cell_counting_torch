@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -95,7 +96,8 @@ class ConstrainedConv2d(nn.Conv2d):
 def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, grayscale=False, num_workers=0,
                          shuffle_dataset=True, random_seed=42, ngpus=1,
                          ae=False, ae_bin=False, few_shot=False, few_shot_merged=False,
-                         self_supervised=False):
+                         self_supervised=False, weakly_supervised_ae_bin=False, weakly_supervised_ae=False,
+                         unsupervised=False, unweighted=False):
 
 
     transform = T.Compose([T.Lambda(lambda x: x * 1. / 255),
@@ -118,10 +120,23 @@ def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, 
         elif self_supervised:
             images_path = CropImages
             masks_path = CropWeightedMasksSS
-            print('image from {} and masks from {}'.format(CropImages, CropWeightedMasksSS))
+            print('image from {} and masks from {}'.format(CropWeightedMasksSS))
+        elif weakly_supervised_ae_bin:
+            images_path = AugCropImagesWS
+            masks_path = AugCropMasksWS
+            print('masks from {}'.format(masks_path))
+        elif weakly_supervised_ae:
+            images_path = AugCropImagesWSAE
+            masks_path = AugCropMasksWSAE
+            print('masks from {}'.format(masks_path))
+        elif unsupervised:
+            images_path = AugCropImagesU
+            masks_path = AugCropMasksU
+            print('masks from {}'.format(masks_path))
         else:
             images_path = AugCropImages
             masks_path = AugCropMasks
+
     elif dataset == 'red':
         if ae or ae_bin:
             images_path = AugCropImagesAER
@@ -138,17 +153,20 @@ def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, 
     elif dataset == 'blu':
         raise NotImplementedError
     elif dataset == 'green':
-        raise NotImplementedError
+        images_path = AugCropImagesG
+        masks_path = AugCropMasksG
 
     if self_supervised:
         cells_images = SelfSupervised(images_path, val_split=0.3, grayscale=grayscale, transform=[transform, transform_l])
     else:
-        cells_images = CellsLoader(images_path, masks_path, val_split=0.3, grayscale=grayscale, transform=transform, ae=ae)
+        cells_images = CellsLoader(images_path, masks_path, val_split=0.3, grayscale=grayscale,
+                                   transform=transform, ae=ae, ae_bin=ae_bin, unweighted=unweighted)
 
     dataset_size = len(cells_images)
     print('dataset size is {}'.format(dataset_size))
     indices = list(range(dataset_size))
     split = int(np.floor(validation_split * dataset_size))
+
 
     if shuffle_dataset:
         np.random.seed(random_seed)
@@ -162,6 +180,10 @@ def load_data_train_eval(dataset='yellow', batch_size=16, validation_split=0.3, 
                               sampler=train_sampler, num_workers=num_workers)
     validation_loader = DataLoader(cells_images, batch_size=batch_size * ngpus,
                                    sampler=valid_sampler, num_workers=num_workers)
+
+    x, y = next(iter(validation_loader))
+    plt.imshow(torch.permute(y[7], (1,2,0)))
+    plt.show()
 
     return train_loader, validation_loader
 

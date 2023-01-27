@@ -29,6 +29,8 @@ from scipy import ndimage
 import tqdm
 import random
 import pickle
+import matplotlib
+matplotlib.use('Qt5Agg')
 #from keras import backend as K
 #import tensorflow as tf
 #
@@ -129,17 +131,19 @@ def make_cropper(image_ids, images_path , masks_path, SaveCropImages, SaveCropMa
         if color == 'y':
             if (int(name.split('.')[0]) >= 252) & (not(flag_new_images)):
                 print('start cropping on new images at ids {}'.format(ix))
+                print('start cropping on new images at origin ids {}'.format(name))
                 dic = {}
                 dic['id_new_images'] = ix
+                dic['id_new_images_origin_name'] = int(name.split('.')[0])
                 with open('../id_new_images.pickle', 'wb') as handle:
                      pickle.dump(dic, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 flag_new_images = True
 
             image, mask = read_image_masks(name, images_path, masks_path)
             mask = np.squeeze(mask[:, :, 0:1])
-
-        image, mask = read_image_masks_r(name, images_path, masks_path)
-        mask = np.squeeze(mask[:, :, 0:1])
+        else:
+            image, mask = read_image_masks_r(name, images_path, masks_path)
+            mask = np.squeeze(mask[:, :, 0:1])
 
         img_height, img_width, c = image.shape
 
@@ -188,7 +192,7 @@ def make_cropper(image_ids, images_path , masks_path, SaveCropImages, SaveCropMa
 
 
 def make_weights(image_ids,  LoadMasksForWeight, SaveWeightMasks, sigma = 25, dil_k=100,
-                  maximum=False, color='y'):
+                  maximum=False, color='y', learning='supervised'):
 
     if not maximum:
         max_sofar = -100000
@@ -235,6 +239,8 @@ def make_weights(image_ids,  LoadMasksForWeight, SaveWeightMasks, sigma = 25, di
                 distance = ndimage.distance_transform_edt(inverted)
                 w = np.zeros((distance.shape[0],distance.shape[1]), dtype=np.float32)
                 w1 = np.zeros((distance.shape[0],distance.shape[1]), dtype=np.float32)
+                plt.imshow(distance)
+                plt.show()
 
                 for i in range(distance.shape[0]):
 
@@ -279,10 +285,10 @@ def make_weights(image_ids,  LoadMasksForWeight, SaveWeightMasks, sigma = 25, di
             plt.imsave(fname=mask_dir,arr = final_target)
 
     if not maximum:
-        np.save('total_{}.npy'.format(color), total)
+        np.save('total_{}_{}.npy'.format(color, learning), total)
         dic = {}
         dic['max_weight'] = total.max()
-        with open('max_weight_{}_{}.pickle'.format(sigma, color), 'wb') as handle:
+        with open('max_weight_{}_{}_{}.pickle'.format(sigma, color, learning), 'wb') as handle:
             pickle.dump(dic, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     return

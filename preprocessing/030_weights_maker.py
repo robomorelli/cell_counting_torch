@@ -22,6 +22,8 @@ import shutil
 
 from config import *
 from utils import *
+import matplotlib
+matplotlib.use('Qt5Agg')
 
 def main(args, color='y'):
 
@@ -32,10 +34,10 @@ def main(args, color='y'):
     image_ids.sort()
     color = args.color
 
-    if color == 'y':
-        ix = [int(x.split('.')[0]) for x in image_ids]
-        ix.sort()
-        image_ids = [str(x)+'.tiff' for x in ix]
+    #if color == 'y':
+        #ix = [int(x.split('.')[0]) for x in image_ids]
+        #ix.sort()
+        #image_ids = [str(x)+'.tiff' for x in ix]
 
     if args.start_from_zero:
         print('deleting existing files in destination folder')
@@ -49,40 +51,39 @@ def main(args, color='y'):
     # First step: find the maximum weight value
     if args.normalize:
         make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k = args.dilation_kernel,
-                     maximum=False, color=args.color)
+                     maximum=False, color=args.color, learning=args.learning)
     # Second step following the first step: use the previous value to normalize the final weighted masks
         if args.continue_after_normalization:
-            with open('max_weight_{}_{}.pickle'.format(args.sigma, args.color), 'rb') as handle:
+            with open('max_weight_{}_{}_{}.pickle'.format(args.sigma, args.color, args.learning), 'rb') as handle:
                 dic = pickle.load(handle)
             maximum = dic['max_weight']
             make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k = args.dilation_kernel,
-                         maximum=maximum)
+                         maximum=maximum, learning=args.learning)
     # Only the second step: you already get the maximum weight value
     elif args.resume_after_normalization:
         try:
-            with open('max_weight_{}_{}.pickle'.format(args.sigma, args.color), 'rb') as handle:
+            with open('max_weight_{}_{}_{}.pickle'.format(args.sigma, args.color, args.learning), 'rb') as handle:
                 dic = pickle.load(handle)
             maximum = dic['max_weight']
             make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma = args.sigma, dil_k=args.dilation_kernel,
-                         maximum=maximum)
+                         maximum=maximum, learning=args.learning)
         except:
             print('using default value')
             already_done = len(os.listdir(args.CropWeightedMasks))
             image_ids_continue = image_ids[already_done:]
             make_weights(image_ids_continue, args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, dil_k=args.dilation_kernel,
-                         maximum=args.maximum)
+                         maximum=args.maximum, learning=args.learning)
 
     # Only the second step: you already get the maximum weight value and this is the default value passed with the args.maximum arguments
     else:
-        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, maximum=args.maximum)
+        make_weights(image_ids,  args.CropMasks, args.CropWeightedMasks, sigma=args.sigma, maximum=args.maximum, learning=args.learning)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='weighting masks')
 
-    parser.add_argument('--CropMasks', nargs="?", default = CropMasksSS, help='path including mask to weight')
-    parser.add_argument('--CropWeightedMasks', nargs="?", default = CropWeightedMasksSS, help='path where save weighted mask')
-    #parser.add_argument('--save_images_path', nargs="?", default = CropImages, help='save images path')
+    parser.add_argument('--CropMasks', nargs="?", default = CropMasksU, help='path including mask to weight')
+    parser.add_argument('--CropWeightedMasks', nargs="?", default = CropWeightedMasksU, help='path where save weighted mask')
 
     parser.add_argument('--normalize', action='store_const', const=True, default=True, help='find the maximum for normalization filling the total array in 030_weights_maker.py')
     parser.add_argument('--start_from_zero', action='store_const', const=True, default=True, help='delete all file in destination folder')
@@ -97,6 +98,9 @@ if __name__ == "__main__":
     parser.add_argument('--dilation_kernel', nargs="?", type = int, default = 21,  help='kernel to dilate tjhe inverse of the targer (define the core)'
                                                                                        '100 for yellow 21 for red')
     parser.add_argument('--color', nargs="?", type=str, default='y', help='color specification (y or r) to save pickle with right suffix'
+                                                                         'it is needed only whne maximum=False and max value among'
+                                                                         'weights need to be found')
+    parser.add_argument('--learning', nargs="?", type=str, default='supervised', help='color specification (y or r) to save pickle with right suffix'
                                                                          'it is needed only whne maximum=False and max value among'
                                                                          'weights need to be found')
 

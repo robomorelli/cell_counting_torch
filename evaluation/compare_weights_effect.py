@@ -18,7 +18,7 @@ if __name__ == "__main__":
     from pathlib import Path
 
     from keras.models import load_model
-    from evaluation_utils import *
+    from evaluation_utils_bkp import *
 
     plt.rcParams['font.family'] = 'DeJavu Serif'
     plt.rcParams['font.serif'] = ['Helvetica']

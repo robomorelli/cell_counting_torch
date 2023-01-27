@@ -46,27 +46,32 @@ def main(args):
             AugCropImagesAE = AugCropImagesAER
             AugCropMasksAE = AugCropMasksAER
 
-    image_ids = os.listdir(CropImages)
-    image_ids.sort()
+        image_ids = os.listdir(CropImages)
+        image_ids.sort()
 
     if args.color == 'y':
-        CropImages = CropImages
-        CropWeightedMasks =  CropWeightedMasks
-        AugCropImages = AugCropImages
-        AugCropMasks = AugCropMasks
-        AugCropImagesBasic = AugCropImagesBasic
-        AugCropMasksBasic = AugCropMasksBasic
-        AugCropImagesAE = AugCropImagesAE
-        AugCropMasksAE = AugCropMasksAE
+        CropImages = CropImagesU
+        CropWeightedMasks =  CropWeightedMasksU
+        AugCropImages = AugCropImagesU
+        AugCropMasks = AugCropMasksU
+        #AugCropImagesBasic = AugCropImagesBasic
+        #AugCropMasksBasic = AugCropMasksBasic
+        #AugCropImagesAE = AugCropImagesAE
+        #AugCropMasksAE = AugCropMasksAE
+        image_ids = os.listdir(CropImages)
+        image_ids.sort()
 
         shift = len(image_ids)
-        id_edges = [300, 302, 1161, 1380, 1908, 2064]  # These numbers are valid if use our test
+        #id_edges = [300, 302, 1161, 1380, 1908, 2064]  # These numbers are valid if use our test
+        id_edges = ["33_0", "33_1", "33_2", "130_9", "252_10", "252_9", "253_2"]
         try:
             with open('../id_new_images.pickle', 'rb') as handle:
                 dic = pickle.load(handle)
-            id_new_images = dic['id_new_images']
+            #id_new_images = dic['id_new_images']
+            id_new_images = dic['id_new_images_origin_name']
         except:
-            id_new_images = int(0.8 * shift)
+            #id_new_images = int(0.8 * shift)
+            id_new_images = 252
         print(id_new_images)
 
     if args.start_from_zero:
@@ -154,7 +159,10 @@ def main(args):
                     shutil.copy(full_file_name, path_masks)
 
     if args.color == 'y':
-        print('TO IMPLEMENT')
+
+        data_aug_y(image_ids, CropImages, CropWeightedMasks, args.split_num, id_new_images,
+                               args.split_num_new_images, id_edges, path_images, path_masks, shift
+                               , args.unique_split, args.no_artifact_aug)
 
     elif args.color == 'r':
         SaveAugImages = path_images #saved in the same path where the starting one are copied
@@ -220,14 +228,14 @@ if __name__ == "__main__":
                         help='copy cropped in crop_aug images')
     parser.add_argument('--copy_masks', default=True,
                         help='copy cropped in crop_aug masks')
-    parser.add_argument('--unique_split', type=int, default=2,
+    parser.add_argument('--unique_split', type=int, default=0,
                         help='default is 0, define a different number and the same split factor will be used for all the images '
                              'for yellow we let 0 an pply different split among different images (automatically and manually segmented)'
                              'if the number is 0:the split_num and split_num_new_images num will be applied for the autotamitaccli'
                              ' and manually segmentede images respectively')
-    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=True, # dafault to switch on False again to make ae aug
+    parser.add_argument('--no_artifact_aug', action='store_const', const=True, default=False, # dafault to switch on False again to make ae aug
                         help='run basic augmentation')
-    parser.add_argument('--color', nargs="?", type=str, default='r', help='color specification (y or r) to save pickle with right suffix'
+    parser.add_argument('--color', nargs="?", type=str, default='y', help='color specification (y or r) to save pickle with right suffix'
                                                                          'it is needed only when maximum=False and max value among'
                                                                          'weights need to be found')
     parser.add_argument('--ae', action='store_const', const=True, default=False,

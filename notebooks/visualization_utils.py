@@ -29,7 +29,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import ndimage
 
-from evaluation.evaluation_utils import mask_post_processing
+from evaluation.evaluation_utils_bkp import mask_post_processing
 
 # import matplotlib
 # matplotlib.use('ps')
@@ -454,7 +454,7 @@ def compare_predictions_with_metrics(models_dict, test_img_path, test_masks_path
     import numpy as np
     from matplotlib import pyplot as plt
     from pathlib import Path
-    from evaluation.evaluation_utils import mask_post_processing
+    from evaluation.evaluation_utils_bkp import mask_post_processing
 
     import cv2
     import matplotlib.patches as mpatches

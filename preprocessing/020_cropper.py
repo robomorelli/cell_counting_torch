@@ -41,7 +41,7 @@ def main(args):
 
         print('start to crop')
 
-    image_ids = os.listdir(args.images_path)
+    image_ids = os.listdir(args.masks_path)
     image_ids.sort()
 
     if color == 'y':
@@ -60,12 +60,12 @@ if __name__ == "__main__":
 
     parser.add_argument('--start_from_zero', action='store_const', const=True, default=False,
                         help='remove previous file in the destination folder')
-
-    parser.add_argument('--images_path', nargs="?", default=TrainValImagesR,
+    parser.add_argument('--images_path', nargs="?", default=TrainValImages,
                         help='the folder including the images to crop')
-    parser.add_argument('--masks_path', nargs="?", default=TrainValMasksR, help='the folder including the masks to crop')
-    parser.add_argument('--save_images_path', nargs="?", default=CropImagesR, help='save images path')
-    parser.add_argument('--save_masks_path', nargs="?", default=CropMasksR, help='save masks path')
+
+    parser.add_argument('--masks_path', nargs="?", default=TrainValMasksU, help='the folder including the masks to crop')
+    parser.add_argument('--save_images_path', nargs="?", default=CropImagesU, help='save images path')
+    parser.add_argument('--save_masks_path', nargs="?", default=CropMasksU, help='save masks path')
 
     parser.add_argument('--x_size', nargs="?", type=int, default=512, help='width of the crop')
     parser.add_argument('--y_size', nargs="?", type=int, default=512, help='height of the crop')
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument('--y_distance', nargs="?", type=int, default=400,
                         help='distance beetwen cuts points on the y axis')
 
-    parser.add_argument('--color', nargs="?", default='r', help='dataset id')
+    parser.add_argument('--color', nargs="?", default='y', help='dataset id')
     #parser.add_argument('--img_width', nargs="?", type=int, default=IMG_WIDTH, help='width of images to crop')
     #parser.add_argument('--img_height', nargs="?", type=int, default=IMG_HEIGHT, help='height of images to crop')
 

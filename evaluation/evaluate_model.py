@@ -45,7 +45,7 @@ if __name__ == "__main__":
     import cv2
 
     from keras.models import load_model
-    from evaluation_utils import *
+    from evaluation_utils_bkp import *
     from kneed import KneeLocator
 
     model_name = "{}.h5".format(args.model_name)

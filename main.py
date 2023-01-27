@@ -38,21 +38,55 @@ def train(args):
     num_workers = 0
     if args.ae or args.ae_bin:
         n_out=3
-        args.ae = True
+        #args.ae = True
         #args.loss_type='unweighted'
     else:
         n_out=1
+
+    if args.loss_type=='weighted':
+        criterion = WeightedLoss(1, 1.5)
+        unweighted = False
+    #elif args.loss_type=='weightedAE':
+        #criterion = WeightedLossAE(1, 1)
+        #unweighted = False
+    elif args.loss_type=='unweightedAE':
+        criterion = nn.BCELoss()
+        unweighted = True
+    else:
+        print('unweighted loss')
+        criterion = nn.BCELoss()
+        unweighted = True
+        #criterion = UnweightedLoss(1, 1.5) #not for autoencoder but segmentation weighted only on the class type
 
 
     train_loader, validation_loader = load_data_train_eval(dataset=args.dataset,
                                     batch_size=args.bs, validation_split=0.3,
                                     grayscale = False, num_workers=num_workers,
-                                    shuffle_dataset=True, random_seed=42, ngpus=ndevices, ae=args.ae, few_shot_merged=args.few_shot_merged,
+                                    shuffle_dataset=True, random_seed=42, ngpus=ndevices,
+                                    ae=args.ae, ae_bin = args.ae_bin, few_shot_merged=args.few_shot_merged,
                                     few_shot=args.few_shot,
-                                    self_supervised=args.self_supervised)
+                                    self_supervised=args.self_supervised,
+                                   weakly_supervised_ae=args.weakly_supervised_ae,
+                                   weakly_supervised_ae_bin=args.weakly_supervised_ae_bin,
+                                   unsupervised=args.unsupervised,
+                                   unweighted=unweighted)
+
+    learning_type = [args.self_supervised, args.few_shot, args.ae, args.ae_bin, args.fine_tuning,
+                     args.weakly_supervised_ae_bin,  args.weakly_supervised_ae, args.unsupervised]
+    learning_name = ['self_supervised', 'few_shot', 'autoencoder','autoencoder_bin', 'fine_tuning',
+                     'weakly_supervised_ae_bin', 'weakly_supervised_ae', 'unsupervised']
+    learning_zip = zip(learning_type, learning_name)
+    learning = None
+    for lt, ln in learning_zip:
+        if lt==True:
+            learning = ln
+    if learning == None:
+        learning = 'supervised'
+
+    print('learning type', learning)
 
     if args.resume or args.fine_tuning:
-        resume_path = str(args.resume_path) + '/{}/{}'.format(args.model_name, args.model_name + '.h5')
+        resume_path = str(args.resume_path) + '/{}/{}/{}/{}'.format(learning, args.dataset, args.model_name, args.model_name + '.h5')
         args.model_name = args.new_model_name
 
     if args.fine_tuning:
@@ -62,14 +96,22 @@ def train(args):
             added_path = 'fine_tuning/few_shot_merged/{}/{}/'.format(args.dataset, args.model_name)
         else:
             added_path = 'fine_tuning/{}/{}/'.format(args.dataset, args.model_name)
-    elif args.ae or args.ae_bin:
+    elif args.ae:
         added_path = 'autoencoder/{}/{}/'.format(args.dataset, args.model_name)
+    elif args.ae_bin:
+        added_path = 'autoencoder_bin/{}/{}/'.format(args.dataset, args.model_name)
     elif args.few_shot:
         added_path = 'few_shot/{}/{}/'.format(args.dataset, args.model_name)
     elif args.few_shot_merged:
         added_path = 'few_shot_merged/{}/{}/'.format(args.dataset, args.model_name)
     elif args.self_supervised:
         added_path = 'self_supervised/{}/{}/'.format(args.dataset, args.model_name)
+    elif args.weakly_supervised_ae:
+        added_path = 'weakly_supervised_ae/{}/{}/'.format(args.dataset, args.model_name)
+    elif args.weakly_supervised_ae_bin:
+        added_path = 'weakly_supervised_ae_bin/{}/{}/'.format(args.dataset, args.model_name)
+    elif args.unsupervised:
+        added_path = 'unsupervised/{}/{}/'.format(args.dataset, args.model_name)
     else:
         added_path = 'supervised/{}/{}/'.format(args.dataset, args.model_name)
 
@@ -207,14 +249,6 @@ def train(args):
         Set the model to the training mode first and train
         """
 
-        if args.loss_type=='weighted':
-            criterion = WeightedLoss(1, 1.5)
-        if args.loss_type=='weightedAE':
-            criterion = WeightedLossAE(1, 1)
-        if args.loss_type=='unweightedAE':
-            criterion = nn.BCELoss()
-        else:
-            criterion = UnweightedLoss(1, 1.5) #not for autoencoder but segmentation weighted only on the class type
         #torch.autograd.set_detect_anomaly(True)
         for epoch in range(args.epochs):
             model.train()
@@ -278,14 +312,13 @@ if __name__ == "__main__":
     parser.add_argument('--new_model_name', nargs="?", default='c-resunet',
                         help='the name the model will have after resume another model name')
     parser.add_argument('--loss_type', nargs="?", default='weighted',
-                        help='what kind of loss among weighted, unweightedAE')
+                        help='what kind of loss among weighted, unweightedAE, unweighted')
     parser.add_argument('--patience', nargs="?", type=int, default=5, help='patience for checkpoint')
     parser.add_argument('--patience_lr', nargs="?", type=int, default=3, help='patience for early stopping')
-    parser.add_argument('--lr', nargs="?", type=int, default= 0.0001, help='learning rate value')
+    parser.add_argument('--lr', nargs="?", type=int, default= 0.006, help='learning rate value')
     parser.add_argument('--epochs', nargs="?", type=int, default=200, help='number of epochs')
     parser.add_argument('--bs', nargs="?", type=int, default=8, help='batch size')
     parser.add_argument('--dataset', nargs="?", default='yellow', help='dataset flavour')
-
 
     parser.add_argument('--c0', type=int,default=1,
                         help='include or not c0 lauyer')
@@ -302,6 +335,12 @@ if __name__ == "__main__":
     parser.add_argument('--few_shot_merged', action='store_true',
                         help='yellow and red merged')
     parser.add_argument('--self_supervised', action='store_true',
+                        help='use labels generated by the model')
+    parser.add_argument('--weakly_supervised_ae', action='store_true',
+                        help='use labels generated by the model')
+    parser.add_argument('--weakly_supervised_ae_bin', action='store_true',
+                        help='use labels generated by the model')
+    parser.add_argument('--unsupervised', action='store_true',
                         help='use labels generated by the model')
 
     parser.add_argument('--resume', action='store_true',
@@ -325,6 +364,4 @@ if __name__ == "__main__":
         os.makedirs(args.save_model_path)
     train(args=args)
 
-#--model_name c-resunet_yellow --new_model_name c-resunet_y_ftDec_r_20shot --fine_tuning --unfreezed_layers 4 --dataset red --loss_type weighted --few_shot
-#--model_name c-resunet_yellow --new_model_name c-resunet_y_r_few_shot --fine_tuning --unfreezed_layers 4 --few_shot --dataset yellow --loss_type weighted
-#--model_name c-resunet_y_ae --new_model_name c-resunet_y_ae_few_shot_small --from_ae_to_bin --fine_tuning --unfreezed_layers 20 --few_shot_small --dataset yellow --loss_type weighted
+
